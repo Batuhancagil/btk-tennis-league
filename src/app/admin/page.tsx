@@ -529,7 +529,7 @@ export default function AdminDashboard() {
                       {editingField?.userId === user.id && editingField?.field === "gender" ? (
                         <div className="flex gap-2">
                           <select
-                            value={editValues.gender !== undefined ? editValues.gender : (user.gender || "")}
+                            value={editValues.gender !== undefined ? (editValues.gender || "") : (user.gender || "")}
                             onChange={(e) => setEditValues({ gender: e.target.value || null })}
                             className="border rounded px-2 py-1"
                             autoFocus
@@ -566,7 +566,7 @@ export default function AdminDashboard() {
                       {editingField?.userId === user.id && editingField?.field === "level" ? (
                         <div className="flex gap-2">
                           <select
-                            value={editValues.level !== undefined ? editValues.level : (user.level || "")}
+                            value={editValues.level !== undefined ? (editValues.level || "") : (user.level || "")}
                             onChange={(e) => setEditValues({ level: e.target.value || null })}
                             className="border rounded px-2 py-1"
                             autoFocus
