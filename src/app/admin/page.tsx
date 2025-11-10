@@ -46,6 +46,8 @@ export default function AdminDashboard() {
   })
   const [saving, setSaving] = useState(false)
   const [creatingLeagues, setCreatingLeagues] = useState(false)
+  const [showExcelUpload, setShowExcelUpload] = useState(false)
+  const [uploadingExcel, setUploadingExcel] = useState(false)
 
   useEffect(() => {
     if (session?.user) {
@@ -212,6 +214,40 @@ export default function AdminDashboard() {
     }
   }
 
+  const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploadingExcel(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+
+      const res = await fetch("/api/admin/upload-players", {
+        method: "POST",
+        body: formData,
+      })
+
+      const data = await res.json()
+      if (res.ok) {
+        alert(`Başarıyla yüklendi!\nEklenen: ${data.created}\nHatalı: ${data.errors?.length || 0}`)
+        if (data.errors && data.errors.length > 0) {
+          console.error("Hatalar:", data.errors)
+        }
+        setShowExcelUpload(false)
+        fetchUsers()
+      } else {
+        alert(data.error || "Yükleme başarısız")
+      }
+    } catch (error) {
+      console.error("Error uploading Excel:", error)
+      alert("Yükleme sırasında bir hata oluştu")
+    } finally {
+      setUploadingExcel(false)
+      e.target.value = ""
+    }
+  }
+
   if (!session || session.user.role !== UserRole.SUPERADMIN) {
     return <div>Unauthorized</div>
   }
@@ -220,7 +256,7 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-gray-50">
       <Navbar />
       <div className="container mx-auto px-4 py-8 ml-64">
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-between items-center mb-6 -mt-4">
           <h1 className="text-3xl font-bold">Superadmin Paneli</h1>
           <div className="flex gap-2">
             <button
@@ -236,8 +272,31 @@ export default function AdminDashboard() {
             >
               {showAddForm ? "İptal" : "+ Yeni Oyuncu Ekle"}
             </button>
+            <button
+              onClick={() => setShowExcelUpload(!showExcelUpload)}
+              className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600"
+            >
+              {showExcelUpload ? "İptal" : "📊 Excel ile Yükle"}
+            </button>
           </div>
         </div>
+
+        {showExcelUpload && (
+          <div className="bg-white rounded-lg shadow p-4 mb-6">
+            <h2 className="text-lg font-semibold mb-4">Excel ile Oyuncu Yükle</h2>
+            <p className="text-sm text-gray-600 mb-4">
+              Excel dosyası formatı: Email, Şifre, İsim, Cinsiyet (MALE/FEMALE), Seviye (MASTER/A/B/C/D)
+            </p>
+            <input
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleExcelUpload}
+              disabled={uploadingExcel}
+              className="mb-4"
+            />
+            {uploadingExcel && <p className="text-blue-600">Yükleniyor...</p>}
+          </div>
+        )}
 
         {showAddForm && (
           <div className="bg-white rounded-lg shadow p-4 mb-6">

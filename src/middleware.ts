@@ -16,8 +16,15 @@ export default withAuth(
     }
 
     // Check if user is approved
-    if (token.status !== UserStatus.APPROVED) {
+    // Handle undefined status - treat as PENDING and redirect to pending page
+    // Allow PLAYER role to access /player routes even if not approved (layout will handle redirect)
+    const userStatus = token.status as UserStatus | undefined
+    if (!userStatus || userStatus !== UserStatus.APPROVED) {
       if (path.startsWith("/auth") || path === "/pending") {
+        return NextResponse.next()
+      }
+      // Allow players to access /player routes - layout will handle redirect to pending
+      if (path.startsWith("/player") && token.role === UserRole.PLAYER) {
         return NextResponse.next()
       }
       return NextResponse.redirect(new URL("/pending", req.url))

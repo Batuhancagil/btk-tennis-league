@@ -3,6 +3,7 @@
 import { useSession } from "next-auth/react"
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import { MatchStatus } from "@prisma/client"
 
 interface UserProfile {
   id: string
@@ -18,18 +19,92 @@ interface UserProfile {
   }>
 }
 
+interface Match {
+  id: string
+  homeTeam: {
+    id: string
+    name: string
+  }
+  awayTeam: {
+    id: string
+    name: string
+  }
+  status: MatchStatus
+  homeScore: number | null
+  awayScore: number | null
+  squads: Array<{
+    teamId: string
+    player: {
+      id: string
+      name: string
+    }
+  }>
+}
+
 export default function PlayerDashboard() {
   const { data: session } = useSession()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [invitations, setInvitations] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [matchStats, setMatchStats] = useState({
+    totalMatches: 0,
+    wins: 0,
+    draws: 0,
+    losses: 0,
+  })
 
   useEffect(() => {
     if (session?.user) {
       fetchProfile()
       fetchInvitations()
+      fetchMatchStats()
     }
   }, [session])
+
+  const fetchMatchStats = async () => {
+    try {
+      const res = await fetch("/api/matches")
+      const data = await res.json()
+      // Filter matches where player participated
+      const playerMatches = data.filter((match: Match) =>
+        match.squads.some((squad) => squad.player.id === session?.user.id)
+      )
+
+      const playedMatches = playerMatches.filter(
+        (m: Match) => m.status === MatchStatus.PLAYED && m.homeScore !== null && m.awayScore !== null
+      )
+
+      let wins = 0
+      let losses = 0
+      let draws = 0
+
+      playedMatches.forEach((match: Match) => {
+        const playerSquad = match.squads.find((s) => s.player.id === session?.user.id)
+        if (!playerSquad) return
+
+        const isHomeTeam = playerSquad.teamId === match.homeTeam.id
+        const playerScore = isHomeTeam ? match.homeScore! : match.awayScore!
+        const opponentScore = isHomeTeam ? match.awayScore! : match.homeScore!
+
+        if (playerScore > opponentScore) {
+          wins++
+        } else if (playerScore < opponentScore) {
+          losses++
+        } else {
+          draws++
+        }
+      })
+
+      setMatchStats({
+        totalMatches: playedMatches.length,
+        wins,
+        losses,
+        draws,
+      })
+    } catch (error) {
+      console.error("Error fetching match stats:", error)
+    }
+  }
 
   const fetchProfile = async () => {
     try {
@@ -141,6 +216,24 @@ export default function PlayerDashboard() {
           {/* Matches Card */}
           <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
             <h2 className="text-xl font-bold text-gray-900 mb-4">Maç Geçmişi</h2>
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="bg-gray-50 rounded-lg p-3">
+                <div className="text-xs text-gray-500 mb-1">Toplam Maç</div>
+                <div className="text-xl font-bold text-gray-900">{matchStats.totalMatches}</div>
+              </div>
+              <div className="bg-green-50 rounded-lg p-3">
+                <div className="text-xs text-gray-500 mb-1">Galibiyet</div>
+                <div className="text-xl font-bold text-green-600">{matchStats.wins}</div>
+              </div>
+              <div className="bg-yellow-50 rounded-lg p-3">
+                <div className="text-xs text-gray-500 mb-1">Beraberlik</div>
+                <div className="text-xl font-bold text-yellow-600">{matchStats.draws}</div>
+              </div>
+              <div className="bg-red-50 rounded-lg p-3">
+                <div className="text-xs text-gray-500 mb-1">Mağlubiyet</div>
+                <div className="text-xl font-bold text-red-600">{matchStats.losses}</div>
+              </div>
+            </div>
             <Link
               href="/player/matches"
               className="inline-flex items-center gap-2 px-4 py-2 bg-tennis-gold text-tennis-black rounded-lg font-semibold hover:bg-tennis-gold/90 transition-colors"

@@ -31,6 +31,7 @@ export default function CaptainDashboard() {
   const [showCreateTeam, setShowCreateTeam] = useState(false)
   const [newTeamName, setNewTeamName] = useState("")
   const [newTeamCategory, setNewTeamCategory] = useState<TeamCategory>(TeamCategory.MALE)
+  const [invitedPlayers, setInvitedPlayers] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     if (session?.user) {
@@ -92,7 +93,9 @@ export default function CaptainDashboard() {
         body: JSON.stringify({ teamId, playerId }),
       })
       if (res.ok) {
-        alert("Davet gönderildi")
+        setInvitedPlayers((prev) => new Set([...prev, `${teamId}-${playerId}`]))
+        // Refresh teams to get updated invitation status
+        fetchTeams()
       } else {
         const error = await res.json()
         alert(error.error || "Hata oluştu")
@@ -218,22 +221,31 @@ export default function CaptainDashboard() {
                       // Check if player is already in team
                       return !team.players.some((tp) => tp.player.id === player.id)
                     })
-                    .map((player) => (
-                      <div
-                        key={player.id}
-                        className="flex items-center justify-between p-2 bg-gray-50 rounded"
-                      >
-                        <span className="text-sm">
-                          {player.name} ({player.level})
-                        </span>
-                        <button
-                          onClick={() => handleInvitePlayer(team.id, player.id)}
-                          className="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
+                    .map((player) => {
+                      const isInvited = invitedPlayers.has(`${team.id}-${player.id}`)
+                      return (
+                        <div
+                          key={player.id}
+                          className="flex items-center justify-between p-2 bg-gray-50 rounded"
                         >
-                          Davet Et
-                        </button>
-                      </div>
-                    ))}
+                          <span className="text-sm">
+                            {player.name} ({player.level})
+                          </span>
+                          {isInvited ? (
+                            <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded font-medium">
+                              Davet Edildi
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => handleInvitePlayer(team.id, player.id)}
+                              className="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
+                            >
+                              Davet Et
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })}
                 </div>
               </div>
             </div>

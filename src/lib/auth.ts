@@ -100,14 +100,20 @@ export const authOptions: NextAuthOptions = {
       // Initial sign in - user object is available
       if (user) {
         token.id = user.id
+        // Ensure email is set in token for future lookups
+        if (user.email) {
+          token.email = user.email
+        }
         // If user has role/status from authorize (credentials provider), use them
         if ('role' in user && user.role) {
           token.role = user.role as UserRole
-          token.status = user.status as UserStatus
-          token.gender = user.gender as any
-          token.level = user.level as any
-        } else if (user.email) {
-          // Otherwise fetch from database (OAuth providers)
+          token.status = ('status' in user && user.status) ? user.status as UserStatus : undefined
+          token.gender = ('gender' in user && user.gender) ? user.gender as any : undefined
+          token.level = ('level' in user && user.level) ? user.level as any : undefined
+        }
+        
+        // If status or other fields are missing, fetch from database
+        if (!token.status && user.email) {
           const dbUser = await prisma.user.findUnique({
             where: { email: user.email },
             select: {
@@ -121,10 +127,32 @@ export const authOptions: NextAuthOptions = {
 
           if (dbUser) {
             token.id = dbUser.id
-            token.role = dbUser.role
+            token.role = dbUser.role || token.role
             token.status = dbUser.status
-            token.gender = dbUser.gender
-            token.level = dbUser.level
+            token.gender = dbUser.gender || token.gender
+            token.level = dbUser.level || token.level
+          }
+        }
+      } else {
+        // Token refresh - ensure status is still set, fetch from DB if missing
+        if (!token.status && token.email) {
+          const dbUser = await prisma.user.findUnique({
+            where: { email: token.email as string },
+            select: {
+              id: true,
+              role: true,
+              status: true,
+              gender: true,
+              level: true,
+            },
+          })
+
+          if (dbUser) {
+            token.id = dbUser.id
+            token.role = dbUser.role || token.role
+            token.status = dbUser.status
+            token.gender = dbUser.gender || token.gender
+            token.level = dbUser.level || token.level
           }
         }
       }
@@ -137,13 +165,16 @@ export const authOptions: NextAuthOptions = {
           if (token && typeof token === 'object') {
             if (token.id) session.user.id = token.id as string
             if (token.role) session.user.role = token.role as UserRole
-            if (token.status) session.user.status = token.status as UserStatus
+            // Always set status from token if available, even if it's undefined
+            if ('status' in token) {
+              session.user.status = token.status as UserStatus
+            }
             if (token.gender) session.user.gender = token.gender as any
             if (token.level) session.user.level = token.level as any
           }
           
-          // Fallback: fetch from database if token doesn't have required fields
-          if (!session.user.id && session.user.email) {
+          // Fallback: fetch from database if token doesn't have required fields (id or status)
+          if ((!session.user.id || !session.user.status) && session.user.email) {
             const dbUser = await prisma.user.findUnique({
               where: { email: session.user.email },
               select: {
@@ -156,11 +187,11 @@ export const authOptions: NextAuthOptions = {
             })
 
             if (dbUser) {
-              session.user.id = dbUser.id
-              session.user.role = dbUser.role
-              session.user.status = dbUser.status
-              session.user.gender = dbUser.gender
-              session.user.level = dbUser.level
+              session.user.id = session.user.id || dbUser.id
+              session.user.role = session.user.role || dbUser.role
+              session.user.status = session.user.status || dbUser.status
+              session.user.gender = session.user.gender || dbUser.gender
+              session.user.level = session.user.level || dbUser.level
             }
           }
         }

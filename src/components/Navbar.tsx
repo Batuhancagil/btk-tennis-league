@@ -64,12 +64,12 @@ export default function Navbar() {
             className="flex items-center gap-3 group transition-transform hover:scale-105"
           >
             <div className="relative">
-              <div className="absolute inset-0 bg-tennis-gold opacity-20 blur-xl group-hover:opacity-30 transition-opacity rounded-full" />
-              <div className="relative bg-tennis-black px-4 py-2 rounded-lg">
+              <div className="absolute inset-0 bg-tennis-gold opacity-20 blur-xl group-hover:opacity-30 transition-opacity rounded-full -z-10" />
+              <div className="relative bg-tennis-black px-4 py-2 rounded-lg z-10">
                 <span className="text-2xl font-bold text-white tracking-tight">BTK</span>
               </div>
             </div>
-            <div className="hidden sm:block">
+            <div className="hidden sm:block relative z-10">
               <div className="text-sm font-semibold text-tennis-gold tracking-wide">
                 tennis kommunity
               </div>
