@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
         }
 
         const gender = genderStr === "FEMALE" || genderStr === "KADIN" ? Gender.FEMALE : Gender.MALE
-        let level = PlayerLevel.D
+        let level: PlayerLevel = PlayerLevel.D
         if (levelStr === "MASTER") level = PlayerLevel.MASTER
         else if (levelStr === "A") level = PlayerLevel.A
         else if (levelStr === "B") level = PlayerLevel.B
