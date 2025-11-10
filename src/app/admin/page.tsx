@@ -36,7 +36,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<UserStatus | "ALL">("PENDING")
   const [editingField, setEditingField] = useState<EditingField | null>(null)
-  const [editValues, setEditValues] = useState<Record<string, string>>({})
+  const [editValues, setEditValues] = useState<Record<string, string | null>>({})
   const [showAddForm, setShowAddForm] = useState(false)
   const [newUser, setNewUser] = useState<NewUser>({
     email: "",
@@ -123,7 +123,7 @@ export default function AdminDashboard() {
       
       // Handle password separately - only update if not empty
       if (field === "password") {
-        if (!value || value.trim() === "") {
+        if (!value || (typeof value === "string" && value.trim() === "")) {
           cancelEditing()
           setSaving(false)
           return
