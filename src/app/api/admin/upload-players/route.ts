@@ -56,7 +56,6 @@ export async function POST(req: NextRequest) {
         cellText: true, // Populate cell.w with formatted text
         cellDates: true,
         FS: delimiter, // Field separator
-        RS: "\n", // Record separator (newline for CSV)
       })
     } else {
       // For Excel files (.xlsx, .xls), read as array buffer
