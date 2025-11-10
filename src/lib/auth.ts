@@ -5,18 +5,48 @@ import GitHubProvider from "next-auth/providers/github"
 import { prisma } from "./prisma"
 import { UserRole, UserStatus } from "@prisma/client"
 
+// Validate required environment variables
+if (!process.env.NEXTAUTH_SECRET) {
+  console.error(
+    "ERROR: NEXTAUTH_SECRET is not set. Please set it in your environment variables. " +
+    "You can generate one using: openssl rand -base64 32"
+  )
+  // Don't throw here to allow the app to start, but NextAuth will fail at runtime
+  // This helps with debugging in production
+}
+
+// Build providers array conditionally
+const providers = []
+
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  providers.push(
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    })
+  )
+}
+
+if (process.env.GITHUB_ID && process.env.GITHUB_SECRET) {
+  providers.push(
+    GitHubProvider({
+      clientId: process.env.GITHUB_ID,
+      clientSecret: process.env.GITHUB_SECRET,
+    })
+  )
+}
+
+if (providers.length === 0) {
+  console.warn("Warning: No OAuth providers configured. Please set GOOGLE_CLIENT_ID/SECRET or GITHUB_ID/SECRET")
+}
+
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
-  providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    }),
-    GitHubProvider({
-      clientId: process.env.GITHUB_ID!,
-      clientSecret: process.env.GITHUB_SECRET!,
-    }),
-  ],
+  providers: providers as any,
+  secret: process.env.NEXTAUTH_SECRET,
+  debug: process.env.NODE_ENV === "development",
+  // Trust proxy for Railway deployment
+  trustHost: true,
   callbacks: {
     async session({ session, user }) {
       if (session.user) {
