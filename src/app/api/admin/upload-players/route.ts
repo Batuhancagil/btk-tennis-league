@@ -27,18 +27,90 @@ export async function POST(req: NextRequest) {
     // Dynamically import xlsx
     const XLSX = await import("xlsx")
     const arrayBuffer = await file.arrayBuffer()
-    // Read Excel file (XLSX library handles UTF-8 automatically)
+    // Read Excel file with explicit UTF-8 handling for Turkish characters
+    // cellText: true ensures cell.w (formatted text) is populated, preserving UTF-8
     const workbook = XLSX.read(arrayBuffer, { 
       type: "array",
+      cellText: true, // Populate cell.w with formatted text to preserve UTF-8 characters
+      cellDates: true,
     })
     const sheetName = workbook.SheetNames[0]
     const worksheet = workbook.Sheets[sheetName]
-    // Convert to JSON with proper encoding for Turkish characters
-    // Using raw: false ensures we get formatted text values which preserves UTF-8 characters
-    const data = XLSX.utils.sheet_to_json(worksheet, {
-      raw: false, // Get formatted text values to preserve Turkish characters (ğ, ç, ş, etc.)
-      defval: "", // Default value for empty cells
-    }) as any[]
+    
+    // Get the range of the worksheet
+    const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1')
+    
+    // First, read headers to find column positions
+    // Use cell.w (formatted text) to preserve Turkish characters in headers
+    const headers: { [key: string]: number } = {}
+    for (let C = range.s.c; C <= range.e.c; ++C) {
+      const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C })
+      const cell = worksheet[cellAddress]
+      if (cell) {
+        // Use formatted text (w) if available, otherwise use value (v)
+        const headerText = (cell.w || String(cell.v || '')).trim()
+        // Normalize Turkish characters for comparison (İ -> i, Ğ -> g, etc.)
+        const headerNormalized = headerText
+          .toLowerCase()
+          .replace(/ı/g, 'i')
+          .replace(/ğ/g, 'g')
+          .replace(/ü/g, 'u')
+          .replace(/ş/g, 's')
+          .replace(/ö/g, 'o')
+          .replace(/ç/g, 'c')
+        
+        // Support both Turkish and English column names
+        if (headerNormalized === 'oyuncu' || headerNormalized === 'isim' || headerNormalized === 'name' || headerText.toLowerCase() === 'name') {
+          headers['name'] = C
+        } else if (headerNormalized === 'email' || headerNormalized === 'e-posta' || headerText.toLowerCase() === 'email') {
+          headers['email'] = C
+        } else if (headerNormalized === 'cinsiyet' || headerNormalized === 'gender' || headerText.toLowerCase() === 'gender') {
+          headers['gender'] = C
+        } else if (headerNormalized === 'seviye' || headerNormalized === 'level' || headerText.toLowerCase() === 'level') {
+          headers['level'] = C
+        }
+      }
+    }
+    
+    // Read data rows, accessing cells directly to preserve UTF-8 encoding
+    const data: any[] = []
+    for (let R = 1; R <= range.e.r; ++R) {
+      const row: any = {}
+      if (headers['name'] !== undefined) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: headers['name'] })
+        const cell = worksheet[cellAddress]
+        if (cell) {
+          // Get cell value, handling both v (value) and w (formatted text)
+          row.name = cell.w ? String(cell.w) : (cell.v ? String(cell.v) : '')
+        }
+      }
+      if (headers['email'] !== undefined) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: headers['email'] })
+        const cell = worksheet[cellAddress]
+        if (cell) {
+          row.email = cell.w ? String(cell.w) : (cell.v ? String(cell.v) : '')
+        }
+      }
+      if (headers['gender'] !== undefined) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: headers['gender'] })
+        const cell = worksheet[cellAddress]
+        if (cell) {
+          row.gender = cell.w ? String(cell.w) : (cell.v ? String(cell.v) : '')
+        }
+      }
+      if (headers['level'] !== undefined) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: headers['level'] })
+        const cell = worksheet[cellAddress]
+        if (cell) {
+          row.level = cell.w ? String(cell.w) : (cell.v ? String(cell.v) : '')
+        }
+      }
+      
+      // Only add row if it has at least name or email
+      if (row.name || row.email) {
+        data.push(row)
+      }
+    }
 
     const created = []
     const errors = []
@@ -46,14 +118,11 @@ export async function POST(req: NextRequest) {
     for (let i = 0; i < data.length; i++) {
       const row = data[i]
       try {
-        // Support both Turkish and English column names
-        // Use String() to ensure proper UTF-8 handling
-        const email = String(row.Email || row.email || "").trim()
-        // Handle Turkish characters properly - ensure UTF-8 encoding
-        const nameRaw = row.Oyuncu || row.İsim || row.Name || row.name || ""
-        const name = typeof nameRaw === 'string' ? nameRaw.trim() : String(nameRaw).trim()
-        const genderStr = String(row.Cinsiyet || row.Gender || row.gender || "").trim().toUpperCase()
-        const levelStr = String(row.Seviye || row.Level || row.level || "").trim().toUpperCase()
+        // Extract values - already properly decoded from cells
+        const email = (row.email || "").trim()
+        const name = (row.name || "").trim()
+        const genderStr = (row.gender || "").trim().toUpperCase()
+        const levelStr = (row.level || "").trim().toUpperCase()
 
         // Only email and name are required (password will be auto-generated)
         if (!email || !name) {

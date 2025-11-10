@@ -49,6 +49,8 @@ export default function AdminDashboard() {
   const [showExcelUpload, setShowExcelUpload] = useState(false)
   const [uploadingExcel, setUploadingExcel] = useState(false)
   const [pendingCount, setPendingCount] = useState<number>(0)
+  const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set())
+  const [deletingUsers, setDeletingUsers] = useState(false)
 
   useEffect(() => {
     if (session?.user) {
@@ -74,6 +76,8 @@ export default function AdminDashboard() {
       const res = await fetch(`/api/users${statusParam}`)
       const data = await res.json()
       setUsers(data)
+      // Clear selections when filter changes
+      setSelectedUsers(new Set())
     } catch (error) {
       console.error("Error fetching users:", error)
     } finally {
@@ -268,6 +272,85 @@ export default function AdminDashboard() {
     }
   }
 
+  const handleSelectUser = (userId: string) => {
+    setSelectedUsers((prev) => {
+      const newSet = new Set(prev)
+      if (newSet.has(userId)) {
+        newSet.delete(userId)
+      } else {
+        newSet.add(userId)
+      }
+      return newSet
+    })
+  }
+
+  const handleSelectAll = () => {
+    if (selectedUsers.size === users.length) {
+      setSelectedUsers(new Set())
+    } else {
+      setSelectedUsers(new Set(users.map((u) => u.id)))
+    }
+  }
+
+  const handleDeleteSelected = async () => {
+    if (selectedUsers.size === 0) {
+      alert("Lütfen silmek istediğiniz oyuncuları seçin")
+      return
+    }
+
+    const selectedNames = users
+      .filter((u) => selectedUsers.has(u.id))
+      .map((u) => u.name)
+      .join(", ")
+
+    if (
+      !confirm(
+        `${selectedUsers.size} oyuncuyu silmek istediğinize emin misiniz?\n\nSeçili oyuncular: ${selectedNames}\n\nBu işlem geri alınamaz.`
+      )
+    ) {
+      return
+    }
+
+    setDeletingUsers(true)
+    const errors: string[] = []
+    const success: string[] = []
+
+    for (const userId of selectedUsers) {
+      try {
+        const res = await fetch(`/api/users/${userId}`, {
+          method: "DELETE",
+        })
+
+        const data = await res.json()
+        if (res.ok) {
+          success.push(userId)
+        } else {
+          const userName = users.find((u) => u.id === userId)?.name || userId
+          errors.push(`${userName}: ${data.error || "Silme başarısız"}`)
+        }
+      } catch (error) {
+        const userName = users.find((u) => u.id === userId)?.name || userId
+        errors.push(`${userName}: Silme sırasında hata oluştu`)
+      }
+    }
+
+    setDeletingUsers(false)
+    setSelectedUsers(new Set())
+
+    if (success.length > 0) {
+      await fetchUsers()
+      await fetchPendingCount()
+    }
+
+    if (errors.length > 0) {
+      alert(
+        `${success.length} oyuncu başarıyla silindi.\n\n${errors.length} hata:\n${errors.join("\n")}`
+      )
+    } else {
+      alert(`${success.length} oyuncu başarıyla silindi`)
+    }
+  }
+
   const handleDownloadTemplate = async () => {
     try {
       const res = await fetch("/api/admin/download-template")
@@ -426,28 +509,39 @@ export default function AdminDashboard() {
 
         <h2 className="text-2xl font-semibold mb-4">Oyuncular</h2>
 
-        <div className="mb-4 flex gap-2">
-          <button
-            onClick={() => setFilter("ALL")}
-            className={`px-4 py-2 rounded ${
-              filter === "ALL" ? "bg-blue-500 text-white" : "bg-white"
-            }`}
-          >
-            Tümü
-          </button>
-          <button
-            onClick={() => setFilter("PENDING")}
-            className={`px-4 py-2 rounded relative ${
-              filter === "PENDING" ? "bg-blue-500 text-white" : "bg-white"
-            }`}
-          >
-            Bekleyenler
-            {pendingCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
-                {pendingCount}
-              </span>
-            )}
-          </button>
+        <div className="mb-4 flex gap-2 items-center justify-between">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setFilter("ALL")}
+              className={`px-4 py-2 rounded ${
+                filter === "ALL" ? "bg-blue-500 text-white" : "bg-white"
+              }`}
+            >
+              Tümü
+            </button>
+            <button
+              onClick={() => setFilter("PENDING")}
+              className={`px-4 py-2 rounded relative ${
+                filter === "PENDING" ? "bg-blue-500 text-white" : "bg-white"
+              }`}
+            >
+              Bekleyenler
+              {pendingCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                  {pendingCount}
+                </span>
+              )}
+            </button>
+          </div>
+          {selectedUsers.size > 0 && (
+            <button
+              onClick={handleDeleteSelected}
+              disabled={deletingUsers}
+              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {deletingUsers ? "Siliniyor..." : `Seçilileri Sil (${selectedUsers.size})`}
+            </button>
+          )}
         </div>
 
         {loading ? (
@@ -458,6 +552,14 @@ export default function AdminDashboard() {
               <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                    <input
+                      type="checkbox"
+                      checked={users.length > 0 && selectedUsers.size === users.length}
+                      onChange={handleSelectAll}
+                      className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                  </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                     İsim
                   </th>
@@ -486,7 +588,15 @@ export default function AdminDashboard() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {users.map((user) => (
-                  <tr key={user.id}>
+                  <tr key={user.id} className={selectedUsers.has(user.id) ? "bg-blue-50" : ""}>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={selectedUsers.has(user.id)}
+                        onChange={() => handleSelectUser(user.id)}
+                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       {editingField?.userId === user.id && editingField?.field === "name" ? (
                         <div className="flex gap-2">
