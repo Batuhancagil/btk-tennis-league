@@ -34,7 +34,7 @@ export default function AdminDashboard() {
   const { data: session } = useSession()
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<UserStatus | "ALL">("PENDING")
+  const [filter, setFilter] = useState<UserStatus | "ALL">("ALL")
   const [editingField, setEditingField] = useState<EditingField | null>(null)
   const [editValues, setEditValues] = useState<Record<string, string | null>>({})
   const [showAddForm, setShowAddForm] = useState(false)
@@ -46,16 +46,27 @@ export default function AdminDashboard() {
     level: null,
   })
   const [saving, setSaving] = useState(false)
-  const [creatingLeagues, setCreatingLeagues] = useState(false)
   const [showExcelUpload, setShowExcelUpload] = useState(false)
   const [uploadingExcel, setUploadingExcel] = useState(false)
+  const [pendingCount, setPendingCount] = useState<number>(0)
 
   useEffect(() => {
     if (session?.user) {
       fetchUsers()
+      fetchPendingCount()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, filter])
+
+  const fetchPendingCount = async () => {
+    try {
+      const res = await fetch("/api/users?status=PENDING")
+      const data = await res.json()
+      setPendingCount(Array.isArray(data) ? data.length : 0)
+    } catch (error) {
+      console.error("Error fetching pending count:", error)
+    }
+  }
 
   const fetchUsers = async () => {
     try {
@@ -78,7 +89,8 @@ export default function AdminDashboard() {
         body: JSON.stringify({ userId, status }),
       })
       if (res.ok) {
-        fetchUsers()
+        await fetchUsers()
+        await fetchPendingCount()
       }
     } catch (error) {
       console.error("Error approving user:", error)
@@ -93,7 +105,7 @@ export default function AdminDashboard() {
         body: JSON.stringify({ role }),
       })
       if (res.ok) {
-        fetchUsers()
+        await fetchUsers()
       }
     } catch (error) {
       console.error("Error updating role:", error)
@@ -139,6 +151,7 @@ export default function AdminDashboard() {
 
       if (res.ok) {
         await fetchUsers()
+        await fetchPendingCount()
         cancelEditing()
       } else {
         const error = await res.json()
@@ -176,6 +189,7 @@ export default function AdminDashboard() {
         })
         setShowAddForm(false)
         await fetchUsers()
+        await fetchPendingCount()
       } else {
         const error = await res.json()
         alert(error.error || "Kullanıcı oluşturma başarısız")
@@ -185,33 +199,6 @@ export default function AdminDashboard() {
       alert("Kullanıcı oluşturma sırasında bir hata oluştu")
     } finally {
       setSaving(false)
-    }
-  }
-
-  const handleCreateLeagues = async () => {
-    if (!confirm("Tüm ligleri oluşturmak istediğinizden emin misiniz? (Mevcut ligler atlanacak)")) {
-      return
-    }
-
-    setCreatingLeagues(true)
-    try {
-      const res = await fetch("/api/admin/create-leagues", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      })
-      const data = await res.json()
-      if (res.ok) {
-        alert(
-          `Ligler başarıyla oluşturuldu!\nOluşturulan: ${data.created}\nAtlanan: ${data.skipped}\nSezon: ${data.season}`
-        )
-      } else {
-        alert(data.error || "Lig oluşturma sırasında bir hata oluştu")
-      }
-    } catch (error) {
-      console.error("Error creating leagues:", error)
-      alert("Lig oluşturma sırasında bir hata oluştu")
-    } finally {
-      setCreatingLeagues(false)
     }
   }
 
@@ -243,7 +230,8 @@ export default function AdminDashboard() {
         }
         alert(message)
         setShowExcelUpload(false)
-        fetchUsers()
+        await fetchUsers()
+        await fetchPendingCount()
       } else {
         alert(data.error || "Yükleme başarısız")
       }
@@ -269,7 +257,8 @@ export default function AdminDashboard() {
       const data = await res.json()
       if (res.ok) {
         alert("Oyuncu başarıyla silindi")
-        fetchUsers()
+        await fetchUsers()
+        await fetchPendingCount()
       } else {
         alert(data.error || "Silme işlemi başarısız")
       }
@@ -308,17 +297,10 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
-      <div className="container mx-auto px-4 py-8 ml-64">
+      <div className="container mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-6 -mt-4">
           <h1 className="text-3xl font-bold">Superadmin Paneli</h1>
           <div className="flex gap-2">
-            <button
-              onClick={handleCreateLeagues}
-              disabled={creatingLeagues}
-              className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50"
-            >
-              {creatingLeagues ? "Oluşturuluyor..." : "🏆 Ligleri Oluştur"}
-            </button>
             <button
               onClick={() => setShowAddForm(!showAddForm)}
               className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
@@ -442,23 +424,9 @@ export default function AdminDashboard() {
           </div>
         )}
 
+        <h2 className="text-2xl font-semibold mb-4">Oyuncular</h2>
+
         <div className="mb-4 flex gap-2">
-          <button
-            onClick={() => setFilter("PENDING")}
-            className={`px-4 py-2 rounded ${
-              filter === "PENDING" ? "bg-blue-500 text-white" : "bg-white"
-            }`}
-          >
-            Bekleyenler
-          </button>
-          <button
-            onClick={() => setFilter("APPROVED")}
-            className={`px-4 py-2 rounded ${
-              filter === "APPROVED" ? "bg-blue-500 text-white" : "bg-white"
-            }`}
-          >
-            Onaylananlar
-          </button>
           <button
             onClick={() => setFilter("ALL")}
             className={`px-4 py-2 rounded ${
@@ -467,13 +435,27 @@ export default function AdminDashboard() {
           >
             Tümü
           </button>
+          <button
+            onClick={() => setFilter("PENDING")}
+            className={`px-4 py-2 rounded relative ${
+              filter === "PENDING" ? "bg-blue-500 text-white" : "bg-white"
+            }`}
+          >
+            Bekleyenler
+            {pendingCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                {pendingCount}
+              </span>
+            )}
+          </button>
         </div>
 
         {loading ? (
           <div>Yükleniyor...</div>
         ) : (
           <div className="bg-white rounded-lg shadow overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -798,7 +780,8 @@ export default function AdminDashboard() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+              </table>
+            </div>
           </div>
         )}
       </div>
