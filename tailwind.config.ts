@@ -52,6 +52,13 @@ const config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        tennis: {
+          black: "hsl(var(--tennis-black))",
+          white: "hsl(var(--tennis-white))",
+          gold: "hsl(var(--tennis-gold))",
+          green: "hsl(var(--tennis-green))",
+          "green-light": "hsl(var(--tennis-green-light))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

@@ -20,7 +20,7 @@ export default async function PlayerLayout({
     return (
       <>
         <Navbar />
-        {children}
+        <div className="pt-20">{children}</div>
       </>
     )
   }
@@ -32,7 +32,7 @@ export default async function PlayerLayout({
   return (
     <>
       <Navbar />
-      {children}
+      <div className="pt-20">{children}</div>
     </>
   )
 }

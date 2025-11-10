@@ -2,7 +2,6 @@
 
 import { useSession } from "next-auth/react"
 import { useEffect, useState } from "react"
-import Navbar from "@/components/Navbar"
 import Link from "next/link"
 
 interface UserProfile {
@@ -72,65 +71,95 @@ export default function PlayerDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <Navbar />
-        <div className="container mx-auto px-4 py-8">Yükleniyor...</div>
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+        <div className="container mx-auto px-4 py-8">
+          <div className="flex items-center justify-center py-20">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-tennis-gold mx-auto mb-4"></div>
+              <div className="text-gray-600">Yükleniyor...</div>
+            </div>
+          </div>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Navbar />
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       <div className="container mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-6">Oyuncu Paneli</h1>
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold text-gray-900 mb-2">Oyuncu Paneli</h1>
+          <p className="text-gray-600">Profil bilgileriniz ve takımlarınız</p>
+        </div>
 
         <div className="grid gap-6 md:grid-cols-2">
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold mb-4">Profil Bilgileri</h2>
+          {/* Profile Card */}
+          <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-lg bg-tennis-gradient flex items-center justify-center text-white font-semibold">
+                {profile?.name?.charAt(0).toUpperCase() || "U"}
+              </div>
+              <h2 className="text-xl font-bold text-gray-900">Profil Bilgileri</h2>
+            </div>
             {profile && (
-              <div className="space-y-2">
-                <p><strong>İsim:</strong> {profile.name}</p>
-                <p><strong>Cinsiyet:</strong> {profile.gender === "MALE" ? "Erkek" : "Kadın"}</p>
-                <p><strong>Seviye:</strong> {profile.level}</p>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between py-2 border-b border-gray-100">
+                  <span className="text-gray-600 font-medium">İsim:</span>
+                  <span className="text-gray-900 font-semibold">{profile.name}</span>
+                </div>
+                <div className="flex items-center justify-between py-2 border-b border-gray-100">
+                  <span className="text-gray-600 font-medium">Cinsiyet:</span>
+                  <span className="text-gray-900 font-semibold">{profile.gender === "MALE" ? "Erkek" : "Kadın"}</span>
+                </div>
+                <div className="flex items-center justify-between py-2">
+                  <span className="text-gray-600 font-medium">Seviye:</span>
+                  <span className="px-3 py-1 bg-tennis-green/10 text-tennis-green rounded-lg font-semibold">{profile.level}</span>
+                </div>
               </div>
             )}
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold mb-4">Takımlarım</h2>
+          {/* Teams Card */}
+          <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Takımlarım</h2>
             {profile && profile.teams.length > 0 ? (
               <ul className="space-y-2">
                 {profile.teams.map(({ team }) => (
-                  <li key={team.id} className="p-2 bg-gray-50 rounded">
-                    {team.name} ({team.category === "MALE" ? "Erkek" : team.category === "FEMALE" ? "Kadın" : "Mix"})
+                  <li key={team.id} className="p-3 bg-gradient-to-r from-tennis-green/5 to-tennis-green/10 rounded-lg border border-tennis-green/20 hover:border-tennis-green/40 transition-colors">
+                    <div className="font-semibold text-gray-900">{team.name}</div>
+                    <div className="text-sm text-gray-600 mt-1">
+                      {team.category === "MALE" ? "Erkek" : team.category === "FEMALE" ? "Kadın" : "Mix"} Takımı
+                    </div>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="text-gray-500">Henüz takımınız yok</p>
+              <p className="text-gray-500 text-center py-4">Henüz takımınız yok</p>
             )}
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold mb-4">Maç Geçmişi</h2>
+          {/* Matches Card */}
+          <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Maç Geçmişi</h2>
             <Link
               href="/player/matches"
-              className="text-blue-600 hover:underline"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-tennis-gold text-tennis-black rounded-lg font-semibold hover:bg-tennis-gold/90 transition-colors"
             >
-              Tüm maçları görüntüle →
+              Tüm maçları görüntüle
+              <span>→</span>
             </Link>
           </div>
 
-          <div className="bg-white rounded-lg shadow p-6 md:col-span-2">
-            <h2 className="text-xl font-semibold mb-4">Davetler</h2>
+          {/* Invitations Card */}
+          <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow md:col-span-2">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Davetler</h2>
             {invitations.length > 0 ? (
               <div className="space-y-3">
                 {invitations.map((inv) => (
-                  <div key={inv.id} className="flex items-center justify-between p-3 bg-gray-50 rounded">
+                  <div key={inv.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-200 hover:bg-gray-100 transition-colors">
                     <div>
-                      <p className="font-medium">{inv.team.name}</p>
-                      <p className="text-sm text-gray-500">
+                      <p className="font-semibold text-gray-900">{inv.team.name}</p>
+                      <p className="text-sm text-gray-600 mt-1">
                         {inv.team.category === "MALE" ? "Erkek" : inv.team.category === "FEMALE" ? "Kadın" : "Mix"} Takımı
                       </p>
                     </div>
@@ -138,29 +167,29 @@ export default function PlayerDashboard() {
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleInvitationResponse(inv.id, true)}
-                          className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+                          className="px-4 py-2 bg-tennis-green text-white rounded-lg hover:bg-tennis-green/90 transition-colors font-medium"
                         >
                           Kabul Et
                         </button>
                         <button
                           onClick={() => handleInvitationResponse(inv.id, false)}
-                          className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
+                          className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-medium"
                         >
                           Reddet
                         </button>
                       </div>
                     )}
                     {inv.status === "ACCEPTED" && (
-                      <span className="text-green-600">Kabul Edildi</span>
+                      <span className="px-4 py-2 bg-green-100 text-green-700 rounded-lg font-medium">Kabul Edildi</span>
                     )}
                     {inv.status === "REJECTED" && (
-                      <span className="text-red-600">Reddedildi</span>
+                      <span className="px-4 py-2 bg-red-100 text-red-700 rounded-lg font-medium">Reddedildi</span>
                     )}
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-gray-500">Yeni davet yok</p>
+              <p className="text-gray-500 text-center py-4">Yeni davet yok</p>
             )}
           </div>
         </div>

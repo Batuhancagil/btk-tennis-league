@@ -18,7 +18,7 @@ export default async function AdminLayout({
   return (
     <>
       <Navbar />
-      {children}
+      <div className="pt-20">{children}</div>
     </>
   )
 }

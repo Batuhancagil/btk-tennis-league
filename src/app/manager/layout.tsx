@@ -26,7 +26,7 @@ export default async function ManagerLayout({
   return (
     <>
       <Navbar />
-      {children}
+      <div className="pt-20">{children}</div>
     </>
   )
 }
