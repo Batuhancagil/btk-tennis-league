@@ -127,3 +127,57 @@ export async function PATCH(
   }
 }
 
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const session = await getServerSession(authOptions)
+
+    if (!session?.user || session.user.role !== UserRole.SUPERADMIN) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
+    }
+
+    // Check if user exists
+    const user = await prisma.user.findUnique({
+      where: { id: params.id },
+      include: {
+        captainTeams: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    })
+
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
+
+    // Prevent deletion if user is a team captain
+    if (user.captainTeams.length > 0) {
+      const teamNames = user.captainTeams.map((t) => t.name).join(", ")
+      return NextResponse.json(
+        {
+          error: `Cannot delete user who is a captain of team(s): ${teamNames}. Please reassign captain first.`,
+        },
+        { status: 400 }
+      )
+    }
+
+    // Delete user (cascade deletes are handled by Prisma schema)
+    await prisma.user.delete({
+      where: { id: params.id },
+    })
+
+    return NextResponse.json({ success: true, message: "User deleted successfully" })
+  } catch (error: any) {
+    console.error("Error deleting user:", error)
+    if (error.code === "P2025") {
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}
+

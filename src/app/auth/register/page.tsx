@@ -12,14 +12,14 @@ function RegisterForm() {
     email: string
     password: string
     name: string
-    gender: Gender
-    level: PlayerLevel
+    gender: Gender | null
+    level: PlayerLevel | null
   }>({
     email: "",
     password: "",
     name: "",
-    gender: Gender.MALE,
-    level: PlayerLevel.D,
+    gender: null,
+    level: null,
   })
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
@@ -52,8 +52,8 @@ function RegisterForm() {
         email: "",
         password: "",
         name: "",
-        gender: Gender.MALE,
-        level: PlayerLevel.D,
+        gender: null,
+        level: null,
       })
     } catch (err) {
       setError("Bir hata oluştu. Lütfen tekrar deneyin.")
@@ -212,15 +212,15 @@ function RegisterForm() {
 
             <div>
               <label htmlFor="gender" className="block text-sm font-semibold text-gray-700 mb-2">
-                Cinsiyet *
+                Cinsiyet
               </label>
               <select
                 id="gender"
-                value={formData.gender}
-                onChange={(e) => setFormData({ ...formData, gender: e.target.value as Gender })}
-                required
+                value={formData.gender || ""}
+                onChange={(e) => setFormData({ ...formData, gender: e.target.value ? (e.target.value as Gender) : null })}
                 className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-tennis-gold focus:border-tennis-gold transition-all bg-white"
               >
+                <option value="">Seçilmedi</option>
                 <option value={Gender.MALE}>Erkek</option>
                 <option value={Gender.FEMALE}>Kadın</option>
               </select>
@@ -232,10 +232,11 @@ function RegisterForm() {
               </label>
               <select
                 id="level"
-                value={formData.level}
-                onChange={(e) => setFormData({ ...formData, level: e.target.value as PlayerLevel })}
+                value={formData.level || ""}
+                onChange={(e) => setFormData({ ...formData, level: e.target.value ? (e.target.value as PlayerLevel) : null })}
                 className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-tennis-gold focus:border-tennis-gold transition-all bg-white"
               >
+                <option value="">Seçilmedi</option>
                 <option value={PlayerLevel.MASTER}>Master</option>
                 <option value={PlayerLevel.A}>A</option>
                 <option value={PlayerLevel.B}>B</option>

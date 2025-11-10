@@ -23,8 +23,8 @@ export async function POST(
       return NextResponse.json({ error: "Team not found" }, { status: 404 })
     }
 
-    // Only captain of the team or superadmin can add players
-    if (team.captainId !== session.user.id && session.user.role !== UserRole.SUPERADMIN) {
+    // Only captain of the team, manager, or superadmin can add players
+    if (team.captainId !== session.user.id && session.user.role !== UserRole.SUPERADMIN && session.user.role !== UserRole.MANAGER) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
     }
 
@@ -119,8 +119,8 @@ export async function DELETE(
       return NextResponse.json({ error: "Team not found" }, { status: 404 })
     }
 
-    // Only captain of the team or superadmin can remove players
-    if (team.captainId !== session.user.id && session.user.role !== UserRole.SUPERADMIN) {
+    // Only captain of the team, manager, or superadmin can remove players
+    if (team.captainId !== session.user.id && session.user.role !== UserRole.SUPERADMIN && session.user.role !== UserRole.MANAGER) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
     }
 

@@ -25,6 +25,24 @@ interface League {
   }
 }
 
+interface Team {
+  id: string
+  name: string
+  category: TeamCategory
+  captain: {
+    id: string
+    name: string
+  }
+  players: Array<{
+    player: {
+      id: string
+      name: string
+      gender: string
+      level: string
+    }
+  }>
+}
+
 export default function ManagerDashboard() {
   const { data: session } = useSession()
   const [leagues, setLeagues] = useState<League[]>([])
@@ -35,11 +53,18 @@ export default function ManagerDashboard() {
   const [newLeagueType, setNewLeagueType] = useState<LeagueType>(LeagueType.INTRA_TEAM)
   const [newLeagueCategory, setNewLeagueCategory] = useState<TeamCategory>(TeamCategory.MALE)
   const [newLeagueSeason, setNewLeagueSeason] = useState("")
+  const [editingTeam, setEditingTeam] = useState<Team | null>(null)
+  const [editTeamName, setEditTeamName] = useState("")
+  const [editTeamCategory, setEditTeamCategory] = useState<TeamCategory>(TeamCategory.MALE)
+  const [teamPlayers, setTeamPlayers] = useState<any[]>([])
+  const [allPlayers, setAllPlayers] = useState<any[]>([])
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (session?.user) {
       fetchLeagues()
       fetchTeams()
+      fetchAllPlayers()
     }
   }, [session])
 
@@ -62,6 +87,102 @@ export default function ManagerDashboard() {
       setTeams(data)
     } catch (error) {
       console.error("Error fetching teams:", error)
+    }
+  }
+
+  const fetchAllPlayers = async () => {
+    try {
+      const res = await fetch("/api/users?status=APPROVED")
+      const data = await res.json()
+      setAllPlayers(data)
+    } catch (error) {
+      console.error("Error fetching players:", error)
+    }
+  }
+
+  const handleEditTeam = async (teamId: string) => {
+    try {
+      const res = await fetch(`/api/teams/${teamId}`)
+      const data = await res.json()
+      setEditingTeam(data)
+      setEditTeamName(data.name)
+      setEditTeamCategory(data.category)
+      setTeamPlayers(data.players || [])
+    } catch (error) {
+      console.error("Error fetching team:", error)
+      alert("Takım bilgileri yüklenirken hata oluştu")
+    }
+  }
+
+  const handleSaveTeam = async () => {
+    if (!editingTeam) return
+
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/teams/${editingTeam.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editTeamName,
+          category: editTeamCategory,
+        }),
+      })
+      if (res.ok) {
+        setEditingTeam(null)
+        fetchLeagues()
+        fetchTeams()
+      } else {
+        const error = await res.json()
+        alert(error.error || "Hata oluştu")
+      }
+    } catch (error) {
+      console.error("Error updating team:", error)
+      alert("Hata oluştu")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleAddPlayerToTeam = async (playerId: string) => {
+    if (!editingTeam) return
+
+    try {
+      const res = await fetch(`/api/teams/${editingTeam.id}/players`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerId }),
+      })
+      if (res.ok) {
+        handleEditTeam(editingTeam.id) // Refresh team data
+        fetchLeagues()
+      } else {
+        const error = await res.json()
+        alert(error.error || "Hata oluştu")
+      }
+    } catch (error) {
+      console.error("Error adding player:", error)
+      alert("Hata oluştu")
+    }
+  }
+
+  const handleRemovePlayerFromTeam = async (playerId: string) => {
+    if (!editingTeam) return
+    if (!confirm("Oyuncuyu takımdan çıkarmak istediğinize emin misiniz?")) return
+
+    try {
+      const res = await fetch(`/api/teams/${editingTeam.id}/players?playerId=${playerId}`, {
+        method: "DELETE",
+      })
+      if (res.ok) {
+        handleEditTeam(editingTeam.id) // Refresh team data
+        fetchLeagues()
+      } else {
+        const error = await res.json()
+        alert(error.error || "Hata oluştu")
+      }
+    } catch (error) {
+      console.error("Error removing player:", error)
+      alert("Hata oluştu")
     }
   }
 
@@ -190,6 +311,109 @@ export default function ManagerDashboard() {
           </button>
         </div>
 
+        {editingTeam && (
+          <div className="bg-white rounded-xl shadow-lg p-6 mb-6 border-2 border-blue-200">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">Takımı Düzenle</h2>
+            <div className="space-y-5">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Takım Adı</label>
+                <input
+                  type="text"
+                  value={editTeamName}
+                  onChange={(e) => setEditTeamName(e.target.value)}
+                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-tennis-gold focus:border-tennis-gold transition-all"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Kategori</label>
+                <select
+                  value={editTeamCategory}
+                  onChange={(e) => setEditTeamCategory(e.target.value as TeamCategory)}
+                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-tennis-gold focus:border-tennis-gold transition-all"
+                >
+                  <option value={TeamCategory.MALE}>Erkek</option>
+                  <option value={TeamCategory.FEMALE}>Kadın</option>
+                  <option value={TeamCategory.MIXED}>Mix</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Takım Üyeleri</label>
+                <div className="space-y-2 mb-4">
+                  {teamPlayers.length > 0 ? (
+                    teamPlayers.map((tp: any) => (
+                      <div
+                        key={tp.player.id}
+                        className="flex items-center justify-between p-2 bg-gray-50 rounded-lg"
+                      >
+                        <span className="text-sm">
+                          {tp.player.name} ({tp.player.level || "Seviye yok"})
+                        </span>
+                        {editingTeam.captain.id !== tp.player.id && (
+                          <button
+                            onClick={() => handleRemovePlayerFromTeam(tp.player.id)}
+                            className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 transition-colors"
+                          >
+                            Çıkar
+                          </button>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-gray-500 text-sm">Henüz üye yok</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Oyuncu Ekle</label>
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        handleAddPlayerToTeam(e.target.value)
+                        e.target.value = ""
+                      }
+                    }}
+                    className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-tennis-gold focus:border-tennis-gold transition-all"
+                  >
+                    <option value="">Oyuncu Seç</option>
+                    {allPlayers
+                      .filter((player) => {
+                        // Filter players based on team category
+                        if (editTeamCategory === TeamCategory.MALE && player.gender !== "MALE") {
+                          return false
+                        }
+                        if (editTeamCategory === TeamCategory.FEMALE && player.gender !== "FEMALE") {
+                          return false
+                        }
+                        // Check if player is already in team
+                        return !teamPlayers.some((tp: any) => tp.player.id === player.id)
+                      })
+                      .map((player) => (
+                        <option key={player.id} value={player.id}>
+                          {player.name} ({player.level || "Seviye yok"})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleSaveTeam}
+                  disabled={saving}
+                  className="px-6 py-3 bg-tennis-green text-white rounded-xl hover:bg-tennis-green/90 transition-colors font-semibold disabled:opacity-50"
+                >
+                  {saving ? "Kaydediliyor..." : "Kaydet"}
+                </button>
+                <button
+                  onClick={() => setEditingTeam(null)}
+                  className="px-6 py-3 bg-gray-500 text-white rounded-xl hover:bg-gray-600 transition-colors font-semibold"
+                >
+                  İptal
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {showCreateLeague && (
           <div className="bg-white rounded-xl shadow-lg p-6 mb-6 border border-gray-200">
             <h2 className="text-2xl font-bold text-gray-900 mb-6">Yeni Lig Oluştur</h2>
@@ -311,12 +535,20 @@ export default function ManagerDashboard() {
                         className="flex items-center justify-between p-3 bg-gradient-to-r from-tennis-green/5 to-tennis-green/10 rounded-lg border border-tennis-green/20"
                       >
                         <span className="text-sm font-medium text-gray-900">{team.name}</span>
-                        <button
-                          onClick={() => handleRemoveTeam(league.id, team.id)}
-                          className="px-3 py-1 bg-red-500 text-white text-xs rounded-lg hover:bg-red-600 transition-colors font-medium"
-                        >
-                          Çıkar
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleEditTeam(team.id)}
+                            className="px-3 py-1 bg-blue-500 text-white text-xs rounded-lg hover:bg-blue-600 transition-colors font-medium"
+                          >
+                            Düzenle
+                          </button>
+                          <button
+                            onClick={() => handleRemoveTeam(league.id, team.id)}
+                            className="px-3 py-1 bg-red-500 text-white text-xs rounded-lg hover:bg-red-600 transition-colors font-medium"
+                          >
+                            Çıkar
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>

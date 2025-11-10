@@ -76,8 +76,8 @@ export async function PATCH(
       return NextResponse.json({ error: "Team not found" }, { status: 404 })
     }
 
-    // Only captain of the team or superadmin can edit
-    if (team.captainId !== session.user.id && session.user.role !== UserRole.SUPERADMIN) {
+    // Only captain of the team, manager, or superadmin can edit
+    if (team.captainId !== session.user.id && session.user.role !== UserRole.SUPERADMIN && session.user.role !== UserRole.MANAGER) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
     }
 

@@ -11,9 +11,9 @@ export async function POST(req: NextRequest) {
     const { email, password, name, gender, level } = data
 
     // Validate required fields
-    if (!email || !password || !name || !gender) {
+    if (!email || !password || !name) {
       return NextResponse.json(
-        { error: "Email, şifre, isim ve cinsiyet gereklidir" },
+        { error: "Email, şifre ve isim gereklidir" },
         { status: 400 }
       )
     }
@@ -47,15 +47,15 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Validate gender
-    if (gender !== Gender.MALE && gender !== Gender.FEMALE) {
+    // Validate gender (optional)
+    if (gender !== null && gender !== undefined && gender !== Gender.MALE && gender !== Gender.FEMALE) {
       return NextResponse.json(
         { error: "Geçerli bir cinsiyet seçiniz" },
         { status: 400 }
       )
     }
 
-    // Validate level
+    // Validate level (optional)
     const validLevels = [
       PlayerLevel.MASTER,
       PlayerLevel.A,
@@ -63,8 +63,8 @@ export async function POST(req: NextRequest) {
       PlayerLevel.C,
       PlayerLevel.D,
     ]
-    const selectedLevel = level || PlayerLevel.D
-    if (!validLevels.includes(selectedLevel as PlayerLevel)) {
+    const selectedLevel = level || null
+    if (selectedLevel !== null && !validLevels.includes(selectedLevel as PlayerLevel)) {
       return NextResponse.json(
         { error: "Geçerli bir seviye seçiniz" },
         { status: 400 }
@@ -80,8 +80,8 @@ export async function POST(req: NextRequest) {
         email,
         password: hashedPassword,
         name,
-        gender: gender as Gender,
-        level: selectedLevel as PlayerLevel,
+        gender: gender || null,
+        level: selectedLevel || null,
         role: UserRole.PLAYER,
         status: UserStatus.PENDING,
       },

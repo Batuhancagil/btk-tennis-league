@@ -77,8 +77,8 @@ model User {
   email         String      @unique
   name          String
   password      String?     // Optional for OAuth users
-  gender        Gender      @default(MALE)
-  level         PlayerLevel @default(D)
+  gender        Gender?
+  level         PlayerLevel?
   status        UserStatus  @default(PENDING)
   role          UserRole    @default(PLAYER)
   emailVerified DateTime?

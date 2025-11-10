@@ -38,20 +38,34 @@ export async function POST(req: NextRequest) {
     for (let i = 0; i < data.length; i++) {
       const row = data[i]
       try {
+        // Support both Turkish and English column names
         const email = String(row.Email || row.email || "").trim()
-        const password = String(row.Şifre || row.Password || row.password || "").trim()
-        const name = String(row.İsim || row.Name || row.name || "").trim()
-        const genderStr = String(row.Cinsiyet || row.Gender || row.gender || "MALE").trim().toUpperCase()
-        const levelStr = String(row.Seviye || row.Level || row.level || "D").trim().toUpperCase()
+        const name = String(row.Oyuncu || row.İsim || row.Name || row.name || "").trim()
+        const genderStr = String(row.Cinsiyet || row.Gender || row.gender || "").trim().toUpperCase()
+        const levelStr = String(row.Seviye || row.Level || row.level || "").trim().toUpperCase()
 
-        if (!email || !password || !name) {
-          errors.push(`Satır ${i + 2}: Email, şifre ve isim gereklidir`)
+        // Only email and name are required (password will be auto-generated)
+        if (!email || !name) {
+          errors.push(`Satır ${i + 2}: Email ve oyuncu adı gereklidir`)
           continue
         }
 
-        const gender = genderStr === "FEMALE" || genderStr === "KADIN" ? Gender.FEMALE : Gender.MALE
-        let level: PlayerLevel = PlayerLevel.D
-        if (levelStr === "MASTER") level = PlayerLevel.MASTER
+        // Validate email format
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+        if (!emailRegex.test(email)) {
+          errors.push(`Satır ${i + 2}: Geçersiz email formatı: ${email}`)
+          continue
+        }
+
+        let gender: Gender | null = null
+        if (genderStr === "FEMALE" || genderStr === "KADIN" || genderStr === "F") {
+          gender = Gender.FEMALE
+        } else if (genderStr === "MALE" || genderStr === "ERKEK" || genderStr === "M" || genderStr === "E") {
+          gender = Gender.MALE
+        }
+
+        let level: PlayerLevel | null = null
+        if (levelStr === "MASTER" || levelStr === "M") level = PlayerLevel.MASTER
         else if (levelStr === "A") level = PlayerLevel.A
         else if (levelStr === "B") level = PlayerLevel.B
         else if (levelStr === "C") level = PlayerLevel.C
@@ -67,16 +81,17 @@ export async function POST(req: NextRequest) {
           continue
         }
 
-        // Create user (password will be hashed)
-        const hashedPassword = await bcrypt.hash(password, 10)
+        // Generate default password (email-based for uniqueness)
+        const defaultPassword = `Tennis${email.split("@")[0]}123!`
+        const hashedPassword = await bcrypt.hash(defaultPassword, 10)
 
         const user = await prisma.user.create({
           data: {
             email,
             password: hashedPassword,
             name,
-            gender,
-            level,
+            gender: gender || null,
+            level: level || null,
             status: "PENDING",
             role: "PLAYER",
           },

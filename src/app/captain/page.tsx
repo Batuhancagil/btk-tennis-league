@@ -129,7 +129,7 @@ export default function CaptainDashboard() {
 
   const isPlayerInvited = (teamId: string, playerId: string) => {
     return invitations.some(
-      (inv) => inv.teamId === teamId && inv.playerId === playerId && inv.status === "PENDING"
+      (inv) => inv.teamId === teamId && inv.playerId === playerId
     )
   }
 

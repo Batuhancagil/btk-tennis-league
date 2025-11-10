@@ -256,6 +256,51 @@ export default function AdminDashboard() {
     }
   }
 
+  const handleDeleteUser = async (userId: string, userName: string) => {
+    if (!confirm(`"${userName}" adlı oyuncuyu silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`)) {
+      return
+    }
+
+    try {
+      const res = await fetch(`/api/users/${userId}`, {
+        method: "DELETE",
+      })
+
+      const data = await res.json()
+      if (res.ok) {
+        alert("Oyuncu başarıyla silindi")
+        fetchUsers()
+      } else {
+        alert(data.error || "Silme işlemi başarısız")
+      }
+    } catch (error) {
+      console.error("Error deleting user:", error)
+      alert("Silme işlemi sırasında bir hata oluştu")
+    }
+  }
+
+  const handleDownloadTemplate = async () => {
+    try {
+      const res = await fetch("/api/admin/download-template")
+      if (!res.ok) {
+        throw new Error("Template indirme başarısız")
+      }
+
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = "oyuncu-template.xlsx"
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+    } catch (error) {
+      console.error("Error downloading template:", error)
+      alert("Template indirme sırasında bir hata oluştu")
+    }
+  }
+
   if (!session || session.user.role !== UserRole.SUPERADMIN) {
     return <div>Unauthorized</div>
   }
@@ -292,9 +337,20 @@ export default function AdminDashboard() {
         {showExcelUpload && (
           <div className="bg-white rounded-lg shadow p-4 mb-6">
             <h2 className="text-lg font-semibold mb-4">Excel ile Oyuncu Yükle</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Excel dosyası formatı: Email, Şifre, İsim, Cinsiyet (MALE/FEMALE), Seviye (MASTER/A/B/C/D)
-            </p>
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">
+                Excel dosyası formatı: <strong>Oyuncu</strong>, <strong>Email</strong>, <strong>Cinsiyet</strong> (ERKEK/KADIN veya MALE/FEMALE), <strong>Seviye</strong> (MASTER/A/B/C/D)
+              </p>
+              <p className="text-xs text-gray-500 mb-3">
+                Not: Şifre otomatik olarak oluşturulacaktır. Email ve Oyuncu adı zorunludur.
+              </p>
+              <button
+                onClick={handleDownloadTemplate}
+                className="px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 text-sm mb-3"
+              >
+                📥 Template İndir
+              </button>
+            </div>
             <input
               type="file"
               accept=".xlsx,.xls,.csv"
@@ -730,6 +786,13 @@ export default function AdminDashboard() {
                         >
                           Detay
                         </Link>
+                        <button
+                          onClick={() => handleDeleteUser(user.id, user.name)}
+                          className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700"
+                          title="Oyuncuyu sil"
+                        >
+                          Sil
+                        </button>
                       </div>
                     </td>
                   </tr>
