@@ -26,14 +26,47 @@ export async function POST(req: NextRequest) {
 
     // Dynamically import xlsx
     const XLSX = await import("xlsx")
-    const arrayBuffer = await file.arrayBuffer()
-    // Read Excel file with explicit UTF-8 handling for Turkish characters
-    // cellText: true ensures cell.w (formatted text) is populated, preserving UTF-8
-    const workbook = XLSX.read(arrayBuffer, { 
-      type: "array",
-      cellText: true, // Populate cell.w with formatted text to preserve UTF-8 characters
-      cellDates: true,
-    })
+    
+    // Check if file is CSV
+    const fileName = file.name.toLowerCase()
+    const isCSV = fileName.endsWith('.csv')
+    
+    let workbook: any
+    
+    if (isCSV) {
+      // For CSV files, read as UTF-8 text to preserve Turkish characters
+      const arrayBuffer = await file.arrayBuffer()
+      // Decode as UTF-8 to preserve Turkish characters (ğ, ç, ş, etc.)
+      let text = new TextDecoder('utf-8').decode(arrayBuffer)
+      
+      // Remove BOM (Byte Order Mark) if present (UTF-8 BOM: EF BB BF)
+      if (text.charCodeAt(0) === 0xFEFF) {
+        text = text.slice(1)
+      }
+      
+      // Detect delimiter (comma, semicolon, or tab)
+      const firstLine = text.split('\n')[0]
+      let delimiter = ','
+      if (firstLine.includes(';')) delimiter = ';'
+      else if (firstLine.includes('\t')) delimiter = '\t'
+      
+      // Read CSV with UTF-8 encoding
+      workbook = XLSX.read(text, {
+        type: "string",
+        cellText: true, // Populate cell.w with formatted text
+        cellDates: true,
+        FS: delimiter, // Field separator
+        RS: "\n", // Record separator (newline for CSV)
+      })
+    } else {
+      // For Excel files (.xlsx, .xls), read as array buffer
+      const arrayBuffer = await file.arrayBuffer()
+      workbook = XLSX.read(arrayBuffer, { 
+        type: "array",
+        cellText: true, // Populate cell.w with formatted text to preserve UTF-8 characters
+        cellDates: true,
+      })
+    }
     const sheetName = workbook.SheetNames[0]
     const worksheet = workbook.Sheets[sheetName]
     

@@ -351,6 +351,65 @@ export default function AdminDashboard() {
     }
   }
 
+  const handleApproveSelected = async () => {
+    const pendingUsers = users.filter(
+      (u) => selectedUsers.has(u.id) && u.status === UserStatus.PENDING
+    )
+
+    if (pendingUsers.length === 0) {
+      alert("Seçili oyuncular arasında onay bekleyen kullanıcı bulunmuyor")
+      return
+    }
+
+    const selectedNames = pendingUsers.map((u) => u.name).join(", ")
+
+    if (
+      !confirm(
+        `${pendingUsers.length} onay bekleyen oyuncuyu onaylamak istediğinize emin misiniz?\n\nSeçili oyuncular: ${selectedNames}`
+      )
+    ) {
+      return
+    }
+
+    setSaving(true)
+    const errors: string[] = []
+    const success: string[] = []
+
+    for (const user of pendingUsers) {
+      try {
+        const res = await fetch("/api/users/approve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: user.id, status: UserStatus.APPROVED }),
+        })
+
+        if (res.ok) {
+          success.push(user.name)
+        } else {
+          const data = await res.json()
+          errors.push(`${user.name}: ${data.error || "Onaylama başarısız"}`)
+        }
+      } catch (error) {
+        errors.push(`${user.name}: Onaylama sırasında hata oluştu`)
+      }
+    }
+
+    setSaving(false)
+
+    if (success.length > 0) {
+      await fetchUsers()
+      await fetchPendingCount()
+    }
+
+    if (errors.length > 0) {
+      alert(
+        `${success.length} oyuncu başarıyla onaylandı.\n\n${errors.length} hata:\n${errors.join("\n")}`
+      )
+    } else {
+      alert(`${success.length} oyuncu başarıyla onaylandı`)
+    }
+  }
+
   const handleDownloadTemplate = async () => {
     try {
       const res = await fetch("/api/admin/download-template")
@@ -376,6 +435,12 @@ export default function AdminDashboard() {
   if (!session || session.user.role !== UserRole.SUPERADMIN) {
     return <div>Unauthorized</div>
   }
+
+  // Calculate pending users count in selection
+  const pendingSelectedCount = users.filter(
+    (u) => selectedUsers.has(u.id) && u.status === UserStatus.PENDING
+  ).length
+  const hasPendingUsers = pendingSelectedCount > 0
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -511,36 +576,47 @@ export default function AdminDashboard() {
 
         <div className="mb-4 flex gap-2 items-center justify-between">
           <div className="flex gap-2">
-            <button
+          <button
               onClick={() => setFilter("ALL")}
-              className={`px-4 py-2 rounded ${
+            className={`px-4 py-2 rounded ${
                 filter === "ALL" ? "bg-blue-500 text-white" : "bg-white"
-              }`}
-            >
+            }`}
+          >
               Tümü
-            </button>
-            <button
+          </button>
+          <button
               onClick={() => setFilter("PENDING")}
               className={`px-4 py-2 rounded relative ${
                 filter === "PENDING" ? "bg-blue-500 text-white" : "bg-white"
-              }`}
-            >
+            }`}
+          >
               Bekleyenler
               {pendingCount > 0 && (
                 <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
                   {pendingCount}
                 </span>
               )}
-            </button>
+          </button>
           </div>
           {selectedUsers.size > 0 && (
-            <button
-              onClick={handleDeleteSelected}
-              disabled={deletingUsers}
-              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {deletingUsers ? "Siliniyor..." : `Seçilileri Sil (${selectedUsers.size})`}
-            </button>
+            <div className="flex gap-2">
+              {hasPendingUsers && (
+                <button
+                  onClick={handleApproveSelected}
+                  disabled={saving}
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {saving ? "Onaylanıyor..." : `Tümünü Onayla (${pendingSelectedCount})`}
+                </button>
+              )}
+              <button
+                onClick={handleDeleteSelected}
+                disabled={deletingUsers}
+                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {deletingUsers ? "Siliniyor..." : `Seçilileri Sil (${selectedUsers.size})`}
+              </button>
+            </div>
           )}
         </div>
 
@@ -549,7 +625,7 @@ export default function AdminDashboard() {
         ) : (
           <div className="bg-white rounded-lg shadow overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
+            <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
@@ -890,7 +966,7 @@ export default function AdminDashboard() {
                   </tr>
                 ))}
               </tbody>
-              </table>
+            </table>
             </div>
           </div>
         )}
