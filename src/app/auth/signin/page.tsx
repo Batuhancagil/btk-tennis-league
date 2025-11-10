@@ -3,7 +3,7 @@
 import { signIn } from "next-auth/react"
 import { useSearchParams } from "next/navigation"
 import { Suspense, useState } from "react"
-import { Mail, Lock, ArrowRight, Tennis } from "lucide-react"
+import { Mail, Lock, ArrowRight } from "lucide-react"
 
 function SignInForm() {
   const searchParams = useSearchParams()
