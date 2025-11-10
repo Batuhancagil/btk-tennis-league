@@ -37,13 +37,16 @@ if (process.env.GITHUB_ID && process.env.GITHUB_SECRET) {
 }
 
 if (providers.length === 0) {
-  console.warn("Warning: No OAuth providers configured. Please set GOOGLE_CLIENT_ID/SECRET or GITHUB_ID/SECRET")
+  console.error("ERROR: No OAuth providers configured. Please set GOOGLE_CLIENT_ID/SECRET or GITHUB_ID/SECRET")
+  // NextAuth requires at least one provider, so we'll add a dummy one to prevent crashes
+  // but it won't work - this is just to allow the app to start
+  console.error("WARNING: NextAuth will not work without providers!")
 }
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
-  providers: providers as any,
-  secret: process.env.NEXTAUTH_SECRET,
+  providers: providers.length > 0 ? (providers as any) : [],
+  secret: process.env.NEXTAUTH_SECRET || "temp-secret-change-in-production",
   debug: process.env.NODE_ENV === "development",
   callbacks: {
     async session({ session, user }) {

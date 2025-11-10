@@ -1,44 +1,20 @@
 import NextAuth from "next-auth"
 import { authOptions } from "@/lib/auth"
-import { NextResponse } from "next/server"
 
-let handler: ReturnType<typeof NextAuth>
-
-try {
-  handler = NextAuth(authOptions)
-} catch (error) {
-  console.error("NextAuth initialization error:", error)
-  // Return error handler for failed initialization
-  handler = NextAuth({
-    providers: [],
-    secret: process.env.NEXTAUTH_SECRET,
-    pages: {
-      error: "/auth/error",
-    },
-  }) as any
+// Validate configuration before creating handler
+if (!process.env.NEXTAUTH_SECRET) {
+  console.error("CRITICAL: NEXTAUTH_SECRET is not set!")
 }
 
-export async function GET(req: Request) {
-  try {
-    return await handler(req)
-  } catch (error) {
-    console.error("NextAuth GET error:", error)
-    return NextResponse.json(
-      { error: "Authentication configuration error" },
-      { status: 500 }
-    )
-  }
+// Check if providers are configured
+const hasProviders = (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) ||
+                     (process.env.GITHUB_ID && process.env.GITHUB_SECRET)
+
+if (!hasProviders) {
+  console.error("CRITICAL: No OAuth providers configured!")
 }
 
-export async function POST(req: Request) {
-  try {
-    return await handler(req)
-  } catch (error) {
-    console.error("NextAuth POST error:", error)
-    return NextResponse.json(
-      { error: "Authentication configuration error" },
-      { status: 500 }
-    )
-  }
-}
+const handler = NextAuth(authOptions)
+
+export { handler as GET, handler as POST }
 
