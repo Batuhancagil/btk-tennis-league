@@ -81,10 +81,40 @@ export const authOptions: NextAuthOptions = {
     },
     async signIn({ user, account, profile }) {
       try {
-        if (!user.email) return false
+        if (!user.email) {
+          console.error("[NextAuth] SignIn: No email provided")
+          return false
+        }
 
-        // PrismaAdapter will automatically create User and Account
-        // We just need to allow it to proceed
+        console.log(`[NextAuth] SignIn attempt for email: ${user.email}, provider: ${account?.provider}`)
+
+        // Check if user exists
+        const existingUser = await prisma.user.findUnique({
+          where: { email: user.email },
+          include: { accounts: true },
+        })
+
+        if (existingUser) {
+          console.log(`[NextAuth] User exists: ${existingUser.id}, accounts: ${existingUser.accounts.length}`)
+          
+          // Check if account already linked
+          const existingAccount = existingUser.accounts.find(
+            (acc) => acc.provider === account?.provider && acc.providerAccountId === account?.providerAccountId
+          )
+
+          if (existingAccount) {
+            console.log(`[NextAuth] Account already linked: ${existingAccount.id}`)
+            return true
+          }
+
+          // If user exists but account doesn't, PrismaAdapter should link it
+          // But if it fails, we need to handle it
+          console.log(`[NextAuth] User exists but account not linked, adapter will handle`)
+        } else {
+          console.log(`[NextAuth] New user, adapter will create`)
+        }
+
+        // PrismaAdapter will automatically create User and Account or link Account
         return true
       } catch (error) {
         console.error("[NextAuth] SignIn callback error:", error)
