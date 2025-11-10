@@ -7,6 +7,65 @@
 - Google OAuth credentials (opsiyonel)
 - GitHub OAuth credentials (opsiyonel)
 
+## Google OAuth Credentials Nasıl Alınır?
+
+### Adım 1: Google Cloud Console'a Giriş
+1. [Google Cloud Console](https://console.cloud.google.com/) adresine gidin
+2. Google hesabınızla giriş yapın
+
+### Adım 2: Proje Oluşturma
+1. Üst kısımdaki proje seçici menüden "New Project" tıklayın
+2. Proje adını girin (örn: "BTK Tennis League")
+3. "Create" butonuna tıklayın
+4. Proje oluşturulduktan sonra projeyi seçin
+
+### Adım 3: OAuth Consent Screen Yapılandırma
+1. Sol menüden **"APIs & Services"** > **"OAuth consent screen"** seçin
+2. **User Type** seçin:
+   - **External**: Herkesin kullanabileceği (genellikle bu seçilir)
+   - **Internal**: Sadece Google Workspace organizasyonunuzdaki kullanıcılar için
+3. **App information** doldurun:
+   - **App name**: "BTK Tennis League" (veya istediğiniz isim)
+   - **User support email**: E-posta adresiniz
+   - **Developer contact information**: E-posta adresiniz
+4. **"Save and Continue"** tıklayın
+5. **Scopes** sayfasında varsayılan ayarları bırakıp **"Save and Continue"** tıklayın
+6. **Test users** sayfasında (External seçtiyseniz) test kullanıcıları ekleyebilirsiniz, şimdilik atlayabilirsiniz
+7. **"Back to Dashboard"** tıklayın
+
+### Adım 4: OAuth 2.0 Client ID Oluşturma
+1. Sol menüden **"APIs & Services"** > **"Credentials"** seçin
+2. Üst kısımdan **"+ CREATE CREDENTIALS"** > **"OAuth client ID"** seçin
+3. **Application type**: **"Web application"** seçin
+4. **Name**: "BTK Tennis League Web Client" (veya istediğiniz isim)
+5. **Authorized JavaScript origins** bölümüne ekleyin:
+   ```
+   https://btk-tennis-league-production.up.railway.app
+   ```
+   (Local development için de ekleyebilirsiniz: `http://localhost:3000`)
+6. **Authorized redirect URIs** bölümüne ekleyin:
+   ```
+   https://btk-tennis-league-production.up.railway.app/api/auth/callback/google
+   ```
+   (Local development için de ekleyebilirsiniz: `http://localhost:3000/api/auth/callback/google`)
+7. **"CREATE"** butonuna tıklayın
+8. Bir popup açılacak ve **Client ID** ve **Client Secret** gösterilecek
+9. Bu bilgileri kopyalayın ve güvenli bir yere kaydedin (bir daha gösterilmeyecek!)
+
+### Adım 5: Railway'a Environment Variables Ekleme
+1. Railway dashboard'unuza gidin
+2. Projenizi seçin
+3. **"Variables"** sekmesine gidin
+4. Şu değişkenleri ekleyin:
+   - `GOOGLE_CLIENT_ID`: Kopyaladığınız Client ID
+   - `GOOGLE_CLIENT_SECRET`: Kopyaladığınız Client Secret
+
+### Önemli Notlar:
+- **Client Secret** sadece bir kez gösterilir, kaybetmemeniz önemli!
+- Production için OAuth consent screen'i Google'a göndermeniz gerekebilir (verification süreci)
+- Test modunda sadece eklediğiniz test kullanıcıları giriş yapabilir
+- Production'a geçmeden önce OAuth consent screen'i publish etmeniz gerekir
+
 ## Kurulum Adımları
 
 ### 1. Bağımlılıkları Yükleyin
