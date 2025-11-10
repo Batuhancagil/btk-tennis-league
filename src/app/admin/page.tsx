@@ -45,6 +45,7 @@ export default function AdminDashboard() {
     level: PlayerLevel.D,
   })
   const [saving, setSaving] = useState(false)
+  const [creatingLeagues, setCreatingLeagues] = useState(false)
 
   useEffect(() => {
     if (session?.user) {
@@ -184,6 +185,33 @@ export default function AdminDashboard() {
     }
   }
 
+  const handleCreateLeagues = async () => {
+    if (!confirm("Tüm ligleri oluşturmak istediğinizden emin misiniz? (Mevcut ligler atlanacak)")) {
+      return
+    }
+
+    setCreatingLeagues(true)
+    try {
+      const res = await fetch("/api/admin/create-leagues", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      })
+      const data = await res.json()
+      if (res.ok) {
+        alert(
+          `Ligler başarıyla oluşturuldu!\nOluşturulan: ${data.created}\nAtlanan: ${data.skipped}\nSezon: ${data.season}`
+        )
+      } else {
+        alert(data.error || "Lig oluşturma sırasında bir hata oluştu")
+      }
+    } catch (error) {
+      console.error("Error creating leagues:", error)
+      alert("Lig oluşturma sırasında bir hata oluştu")
+    } finally {
+      setCreatingLeagues(false)
+    }
+  }
+
   if (!session || session.user.role !== UserRole.SUPERADMIN) {
     return <div>Unauthorized</div>
   }
@@ -194,12 +222,21 @@ export default function AdminDashboard() {
       <div className="container mx-auto px-4 py-8 ml-64">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold">Superadmin Paneli</h1>
-          <button
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-          >
-            {showAddForm ? "İptal" : "+ Yeni Oyuncu Ekle"}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleCreateLeagues}
+              disabled={creatingLeagues}
+              className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50"
+            >
+              {creatingLeagues ? "Oluşturuluyor..." : "🏆 Ligleri Oluştur"}
+            </button>
+            <button
+              onClick={() => setShowAddForm(!showAddForm)}
+              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            >
+              {showAddForm ? "İptal" : "+ Yeni Oyuncu Ekle"}
+            </button>
+          </div>
         </div>
 
         {showAddForm && (
