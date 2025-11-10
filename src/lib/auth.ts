@@ -132,12 +132,37 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       try {
-        if (session.user && token) {
-          session.user.id = token.id as string
-          session.user.role = token.role as UserRole
-          session.user.status = token.status as UserStatus
-          session.user.gender = token.gender as any
-          session.user.level = token.level as any
+        if (session.user) {
+          // JWT strategy - token always available
+          if (token && typeof token === 'object') {
+            if (token.id) session.user.id = token.id as string
+            if (token.role) session.user.role = token.role as UserRole
+            if (token.status) session.user.status = token.status as UserStatus
+            if (token.gender) session.user.gender = token.gender as any
+            if (token.level) session.user.level = token.level as any
+          }
+          
+          // Fallback: fetch from database if token doesn't have required fields
+          if (!session.user.id && session.user.email) {
+            const dbUser = await prisma.user.findUnique({
+              where: { email: session.user.email },
+              select: {
+                id: true,
+                role: true,
+                status: true,
+                gender: true,
+                level: true,
+              },
+            })
+
+            if (dbUser) {
+              session.user.id = dbUser.id
+              session.user.role = dbUser.role
+              session.user.status = dbUser.status
+              session.user.gender = dbUser.gender
+              session.user.level = dbUser.level
+            }
+          }
         }
       } catch (error) {
         console.error("[NextAuth] Session callback error:", error)

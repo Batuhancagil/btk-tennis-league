@@ -5,13 +5,15 @@ import { NextResponse } from "next/server"
 export async function GET() {
   try {
     const session = await getServerSession(authOptions)
-    return NextResponse.json(session || null)
+    // Return null if no session instead of undefined
+    if (!session) {
+      return NextResponse.json(null)
+    }
+    return NextResponse.json(session)
   } catch (error: any) {
     console.error("[Session API] Error:", error)
-    return NextResponse.json(
-      { error: "Failed to get session", message: error.message },
-      { status: 500 }
-    )
+    // Return null on error instead of error object to prevent client-side issues
+    return NextResponse.json(null)
   }
 }
 
