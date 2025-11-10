@@ -2,8 +2,9 @@
 
 import { signIn } from "next-auth/react"
 import { useSearchParams } from "next/navigation"
+import { Suspense } from "react"
 
-export default function SignInPage() {
+function SignInForm() {
   const searchParams = useSearchParams()
   const callbackUrl = searchParams.get("callbackUrl") || "/"
 
@@ -54,6 +55,26 @@ export default function SignInPage() {
         </div>
       </div>
     </main>
+  )
+}
+
+export default function SignInPage() {
+  return (
+    <Suspense fallback={
+      <main className="flex min-h-screen flex-col items-center justify-center p-24">
+        <div className="z-10 max-w-md w-full">
+          <h1 className="text-4xl font-bold text-center mb-8">
+            BTK Tenis Ligi
+          </h1>
+          <div className="space-y-4">
+            <div className="w-full bg-gray-200 border border-gray-300 rounded-lg px-6 py-3 h-12 animate-pulse" />
+            <div className="w-full bg-gray-200 border border-gray-300 rounded-lg px-6 py-3 h-12 animate-pulse" />
+          </div>
+        </div>
+      </main>
+    }>
+      <SignInForm />
+    </Suspense>
   )
 }
 

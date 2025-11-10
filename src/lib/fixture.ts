@@ -16,29 +16,47 @@ export function generateRoundRobinFixtures(teamIds: string[]): FixtureMatch[] {
 
   const fixtures: FixtureMatch[] = []
   const numTeams = teamIds.length
+  
+  // Standard round-robin: if even teams, n-1 rounds; if odd teams, n rounds
   const rounds = numTeams % 2 === 0 ? numTeams - 1 : numTeams
 
-  // Create a rotating array
+  // Handle odd number of teams by adding a "bye" team temporarily
   const teams = [...teamIds]
+  const hasBye = numTeams % 2 === 1
+  if (hasBye) {
+    teams.push("__BYE__") // Temporary bye marker
+  }
+
+  // Fix the first team, rotate others clockwise each round
   const fixedTeam = teams[0]
+  const rotatingTeams = teams.slice(1)
 
   for (let round = 0; round < rounds; round++) {
-    // Rotate teams (except the first one)
+    // Rotate clockwise: move last element to front
     if (round > 0) {
-      const lastTeam = teams.pop()!
-      teams.splice(1, 0, lastTeam)
+      const lastTeam = rotatingTeams.pop()!
+      rotatingTeams.unshift(lastTeam)
     }
 
-    // Create matches for this round
-    for (let i = 0; i < Math.floor(numTeams / 2); i++) {
-      const homeIndex = i === 0 ? 0 : i + 1
-      const awayIndex = numTeams - 1 - i
+    // Create pairing array for this round
+    const pairingArray = [fixedTeam, ...rotatingTeams]
+    const numPairs = Math.floor(pairingArray.length / 2)
 
-      fixtures.push({
-        homeTeamId: teams[homeIndex],
-        awayTeamId: teams[awayIndex],
-        round: round + 1,
-      })
+    // Pair teams: first vs last, second vs second-to-last, etc.
+    for (let i = 0; i < numPairs; i++) {
+      const homeIndex = i
+      const awayIndex = pairingArray.length - 1 - i
+      const homeTeam = pairingArray[homeIndex]
+      const awayTeam = pairingArray[awayIndex]
+
+      // Skip matches involving the bye team
+      if (homeTeam !== "__BYE__" && awayTeam !== "__BYE__") {
+        fixtures.push({
+          homeTeamId: homeTeam,
+          awayTeamId: awayTeam,
+          round: round + 1,
+        })
+      }
     }
   }
 
