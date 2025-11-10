@@ -43,58 +43,70 @@ if (providers.length === 0) {
   console.error("WARNING: NextAuth will not work without providers!")
 }
 
+// Log provider count for debugging
+console.log(`[NextAuth] Initializing with ${providers.length} provider(s)`)
+
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
   providers: providers.length > 0 ? (providers as any) : [],
   secret: process.env.NEXTAUTH_SECRET || "temp-secret-change-in-production",
-  debug: process.env.NODE_ENV === "development",
+  debug: true, // Enable debug in production to see errors
   callbacks: {
     async session({ session, user }) {
-      if (session.user) {
-        const dbUser = await prisma.user.findUnique({
-          where: { email: session.user.email! },
-          select: {
-            id: true,
-            role: true,
-            status: true,
-            gender: true,
-            level: true,
-          },
-        })
+      try {
+        if (session.user) {
+          const dbUser = await prisma.user.findUnique({
+            where: { email: session.user.email! },
+            select: {
+              id: true,
+              role: true,
+              status: true,
+              gender: true,
+              level: true,
+            },
+          })
 
-        if (dbUser) {
-          session.user.id = dbUser.id
-          session.user.role = dbUser.role
-          session.user.status = dbUser.status
-          session.user.gender = dbUser.gender
-          session.user.level = dbUser.level
+          if (dbUser) {
+            session.user.id = dbUser.id
+            session.user.role = dbUser.role
+            session.user.status = dbUser.status
+            session.user.gender = dbUser.gender
+            session.user.level = dbUser.level
+          }
         }
+      } catch (error) {
+        console.error("[NextAuth] Session callback error:", error)
       }
       return session
     },
     async signIn({ user, account, profile }) {
-      if (!user.email) return false
+      try {
+        if (!user.email) return false
 
-      // Check if user exists
-      const existingUser = await prisma.user.findUnique({
-        where: { email: user.email },
-      })
-
-      if (!existingUser) {
-        // Create new user with pending status
-        await prisma.user.create({
-          data: {
-            email: user.email,
-            name: user.name || "User",
-            gender: "MALE", // Default, should be updated in profile
-            role: UserRole.PLAYER,
-            status: UserStatus.PENDING,
-            image: user.image,
-          },
+        // Check if user exists
+        const existingUser = await prisma.user.findUnique({
+          where: { email: user.email },
         })
-      }
 
-      return true
+        if (!existingUser) {
+          // Create new user with pending status
+          await prisma.user.create({
+            data: {
+              email: user.email,
+              name: user.name || "User",
+              gender: "MALE", // Default, should be updated in profile
+              role: UserRole.PLAYER,
+              status: UserStatus.PENDING,
+              image: user.image,
+            },
+          })
+        }
+
+        return true
+      } catch (error) {
+        console.error("[NextAuth] SignIn callback error:", error)
+        return false
+      }
     },
   },
   pages: {
