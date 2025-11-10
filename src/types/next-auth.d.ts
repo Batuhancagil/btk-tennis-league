@@ -26,10 +26,12 @@ declare module "next-auth" {
 
 declare module "next-auth/jwt" {
   interface JWT {
-    role: UserRole
-    status: UserStatus
-    gender: Gender
-    level: PlayerLevel
+    role?: UserRole
+    status?: UserStatus
+    gender?: Gender
+    level?: PlayerLevel
+    id?: string
+    email?: string
   }
 }
 
