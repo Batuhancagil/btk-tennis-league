@@ -12,6 +12,31 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    // SUPERADMIN can see all invitations
+    if (session.user.role === UserRole.SUPERADMIN) {
+      const invitations = await prisma.invitation.findMany({
+        include: {
+          player: {
+            select: {
+              id: true,
+              name: true,
+              gender: true,
+              level: true,
+            },
+          },
+          team: {
+            select: {
+              id: true,
+              name: true,
+              category: true,
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      })
+      return NextResponse.json(invitations)
+    }
+
     // Players see their own invitations
     if (session.user.role === UserRole.PLAYER) {
       const invitations = await prisma.invitation.findMany({

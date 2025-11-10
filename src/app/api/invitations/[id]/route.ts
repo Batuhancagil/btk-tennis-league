@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { InvitationStatus } from "@prisma/client"
+import { InvitationStatus, UserRole } from "@prisma/client"
 
 export async function PATCH(
   req: NextRequest,
@@ -28,8 +28,9 @@ export async function PATCH(
       return NextResponse.json({ error: "Invitation not found" }, { status: 404 })
     }
 
-    // Only the invited player can respond
-    if (invitation.playerId !== session.user.id) {
+    // SUPERADMIN can accept invitations on behalf of players, otherwise only the invited player can respond
+    const isSuperadmin = session.user.role === UserRole.SUPERADMIN
+    if (!isSuperadmin && invitation.playerId !== session.user.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
     }
 
@@ -47,12 +48,24 @@ export async function PATCH(
 
     // If accepted, add player to team
     if (accept) {
-      await prisma.teamPlayer.create({
-        data: {
-          teamId: invitation.teamId,
-          playerId: invitation.playerId,
+      // Check if player is already in team before adding
+      const existingTeamPlayer = await prisma.teamPlayer.findUnique({
+        where: {
+          teamId_playerId: {
+            teamId: invitation.teamId,
+            playerId: invitation.playerId,
+          },
         },
       })
+
+      if (!existingTeamPlayer) {
+        await prisma.teamPlayer.create({
+          data: {
+            teamId: invitation.teamId,
+            playerId: invitation.playerId,
+          },
+        })
+      }
     }
 
     return NextResponse.json({ success: true })

@@ -11,6 +11,7 @@ export default function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
+  const [notificationCount, setNotificationCount] = useState(0)
 
   useEffect(() => {
     const handleScroll = () => {
@@ -20,12 +21,31 @@ export default function Navbar() {
     return () => window.removeEventListener("scroll", handleScroll)
   }, [])
 
+  useEffect(() => {
+    const fetchNotificationCount = async () => {
+      if (session?.user && (session.user.role === UserRole.PLAYER || session.user.role === UserRole.CAPTAIN)) {
+        try {
+          const res = await fetch("/api/invitations/count")
+          const data = await res.json()
+          setNotificationCount(data.count || 0)
+        } catch (error) {
+          console.error("Error fetching notification count:", error)
+        }
+      }
+    }
+
+    fetchNotificationCount()
+    // Refresh count every 30 seconds
+    const interval = setInterval(fetchNotificationCount, 30000)
+    return () => clearInterval(interval)
+  }, [session])
+
   if (!session) return null
 
   const getDashboardPath = () => {
     switch (session.user.role) {
       case UserRole.SUPERADMIN:
-        return "/admin"
+        return "/player"
       case UserRole.MANAGER:
         return "/manager"
       case UserRole.CAPTAIN:
@@ -115,9 +135,16 @@ export default function Navbar() {
             {(session.user.role === UserRole.PLAYER || session.user.role === UserRole.CAPTAIN) && (
               <Link
                 href="/notifications"
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors group"
+                className="relative flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors group"
               >
-                <Bell className="w-5 h-5 text-gray-600 group-hover:text-tennis-green transition-colors" />
+                <div className="relative">
+                  <Bell className="w-5 h-5 text-gray-600 group-hover:text-tennis-green transition-colors" />
+                  {notificationCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                      {notificationCount > 9 ? "9+" : notificationCount}
+                    </span>
+                  )}
+                </div>
                 <span className="text-sm font-medium text-gray-700 group-hover:text-tennis-green transition-colors">
                   Bildirimler
                 </span>
@@ -228,9 +255,16 @@ export default function Navbar() {
               <Link
                 href="/notifications"
                 onClick={() => setIsMobileMenuOpen(false)}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors mb-4"
+                className="relative flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors mb-4"
               >
-                <Bell className="w-5 h-5" />
+                <div className="relative">
+                  <Bell className="w-5 h-5" />
+                  {notificationCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                      {notificationCount > 9 ? "9+" : notificationCount}
+                    </span>
+                  )}
+                </div>
                 Bildirimler
               </Link>
             )}

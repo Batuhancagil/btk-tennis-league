@@ -4,6 +4,7 @@ import { useSession } from "next-auth/react"
 import { useEffect, useState } from "react"
 import { UserRole, UserStatus, Gender, PlayerLevel } from "@prisma/client"
 import Navbar from "@/components/Navbar"
+import Link from "next/link"
 
 interface User {
   id: string
@@ -25,8 +26,8 @@ interface NewUser {
   email: string
   password: string
   name: string
-  gender: Gender
-  level: PlayerLevel
+  gender: Gender | null
+  level: PlayerLevel | null
 }
 
 export default function AdminDashboard() {
@@ -41,8 +42,8 @@ export default function AdminDashboard() {
     email: "",
     password: "",
     name: "",
-    gender: Gender.MALE,
-    level: PlayerLevel.D,
+    gender: null,
+    level: null,
   })
   const [saving, setSaving] = useState(false)
   const [creatingLeagues, setCreatingLeagues] = useState(false)
@@ -342,13 +343,14 @@ export default function AdminDashboard() {
               <div>
                 <label className="block text-sm font-medium mb-1">Cinsiyet</label>
                 <select
-                  value={newUser.gender}
+                  value={newUser.gender || ""}
                   onChange={(e) => {
-                    const genderValue = e.target.value as Gender
+                    const genderValue = e.target.value ? (e.target.value as Gender) : null
                     setNewUser({ ...newUser, gender: genderValue })
                   }}
                   className="w-full border rounded px-3 py-2"
                 >
+                  <option value="">Seçilmedi</option>
                   <option value={Gender.MALE}>Erkek</option>
                   <option value={Gender.FEMALE}>Kadın</option>
                 </select>
@@ -356,13 +358,14 @@ export default function AdminDashboard() {
               <div>
                 <label className="block text-sm font-medium mb-1">Seviye</label>
                 <select
-                  value={newUser.level}
+                  value={newUser.level || ""}
                   onChange={(e) => {
-                    const levelValue = e.target.value as PlayerLevel
+                    const levelValue = e.target.value ? (e.target.value as PlayerLevel) : null
                     setNewUser({ ...newUser, level: levelValue })
                   }}
                   className="w-full border rounded px-3 py-2"
                 >
+                  <option value="">Seçilmedi</option>
                   <option value={PlayerLevel.MASTER}>Master</option>
                   <option value={PlayerLevel.A}>A</option>
                   <option value={PlayerLevel.B}>B</option>
@@ -526,11 +529,12 @@ export default function AdminDashboard() {
                       {editingField?.userId === user.id && editingField?.field === "gender" ? (
                         <div className="flex gap-2">
                           <select
-                            value={editValues.gender || user.gender}
-                            onChange={(e) => setEditValues({ gender: e.target.value })}
+                            value={editValues.gender !== undefined ? editValues.gender : (user.gender || "")}
+                            onChange={(e) => setEditValues({ gender: e.target.value || null })}
                             className="border rounded px-2 py-1"
                             autoFocus
                           >
+                            <option value="">Seçilmedi</option>
                             <option value={Gender.MALE}>Erkek</option>
                             <option value={Gender.FEMALE}>Kadın</option>
                           </select>
@@ -554,7 +558,7 @@ export default function AdminDashboard() {
                           onClick={() => startEditing(user.id, "gender", user.gender)}
                           title="Düzenlemek için tıklayın"
                         >
-                          {user.gender === "MALE" ? "Erkek" : "Kadın"}
+                          {user.gender === "MALE" ? "Erkek" : user.gender === "FEMALE" ? "Kadın" : "Seçilmedi"}
                         </span>
                       )}
                     </td>
@@ -562,11 +566,12 @@ export default function AdminDashboard() {
                       {editingField?.userId === user.id && editingField?.field === "level" ? (
                         <div className="flex gap-2">
                           <select
-                            value={editValues.level || user.level}
-                            onChange={(e) => setEditValues({ level: e.target.value })}
+                            value={editValues.level !== undefined ? editValues.level : (user.level || "")}
+                            onChange={(e) => setEditValues({ level: e.target.value || null })}
                             className="border rounded px-2 py-1"
                             autoFocus
                           >
+                            <option value="">Seçilmedi</option>
                             <option value={PlayerLevel.MASTER}>Master</option>
                             <option value={PlayerLevel.A}>A</option>
                             <option value={PlayerLevel.B}>B</option>
@@ -698,26 +703,34 @@ export default function AdminDashboard() {
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {user.status === "PENDING" && (
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() =>
-                              handleApprove(user.id, UserStatus.APPROVED)
-                            }
-                            className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600"
-                          >
-                            Onayla
-                          </button>
-                          <button
-                            onClick={() =>
-                              handleApprove(user.id, UserStatus.REJECTED)
-                            }
-                            className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"
-                          >
-                            Reddet
-                          </button>
-                        </div>
-                      )}
+                      <div className="flex gap-2">
+                        {user.status === "PENDING" && (
+                          <>
+                            <button
+                              onClick={() =>
+                                handleApprove(user.id, UserStatus.APPROVED)
+                              }
+                              className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600"
+                            >
+                              Onayla
+                            </button>
+                            <button
+                              onClick={() =>
+                                handleApprove(user.id, UserStatus.REJECTED)
+                              }
+                              className="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600"
+                            >
+                              Reddet
+                            </button>
+                          </>
+                        )}
+                        <Link
+                          href={`/admin/players/${user.id}`}
+                          className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
+                        >
+                          Detay
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}
