@@ -1,7 +1,7 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
-import { UserStatus } from "@prisma/client"
+import { UserStatus, UserRole } from "@prisma/client"
 import Navbar from "@/components/Navbar"
 
 export default async function PlayerLayout({
@@ -13,6 +13,16 @@ export default async function PlayerLayout({
 
   if (!session) {
     redirect("/auth/signin")
+  }
+
+  // SUPERADMIN can access all dashboards
+  if (session.user.role === UserRole.SUPERADMIN) {
+    return (
+      <>
+        <Navbar />
+        {children}
+      </>
+    )
   }
 
   if (session.user.status !== UserStatus.APPROVED) {

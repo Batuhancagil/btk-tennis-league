@@ -30,6 +30,22 @@ export default function Navbar() {
             BTK Tenis Ligi
           </Link>
           <div className="flex items-center gap-4">
+            {session.user.role === UserRole.SUPERADMIN && (
+              <div className="flex gap-2">
+                <Link href="/admin" className="text-sm text-gray-600 hover:text-gray-900 px-2 py-1 rounded hover:bg-gray-100">
+                  Admin
+                </Link>
+                <Link href="/manager" className="text-sm text-gray-600 hover:text-gray-900 px-2 py-1 rounded hover:bg-gray-100">
+                  Manager
+                </Link>
+                <Link href="/captain" className="text-sm text-gray-600 hover:text-gray-900 px-2 py-1 rounded hover:bg-gray-100">
+                  Captain
+                </Link>
+                <Link href="/player" className="text-sm text-gray-600 hover:text-gray-900 px-2 py-1 rounded hover:bg-gray-100">
+                  Player
+                </Link>
+              </div>
+            )}
             <span className="text-sm text-gray-600">{session.user.name}</span>
             <span className="text-xs px-2 py-1 bg-gray-100 rounded">
               {session.user.role}

@@ -24,15 +24,20 @@ export default withAuth(
     }
 
     // Role-based access control
+    // SUPERADMIN can access all dashboards
+    if (token.role === UserRole.SUPERADMIN) {
+      return NextResponse.next()
+    }
+
     if (path.startsWith("/admin") && token.role !== UserRole.SUPERADMIN) {
       return NextResponse.redirect(new URL("/unauthorized", req.url))
     }
 
-    if (path.startsWith("/manager") && token.role !== UserRole.MANAGER && token.role !== UserRole.SUPERADMIN) {
+    if (path.startsWith("/manager") && token.role !== UserRole.MANAGER) {
       return NextResponse.redirect(new URL("/unauthorized", req.url))
     }
 
-    if (path.startsWith("/captain") && token.role !== UserRole.CAPTAIN && token.role !== UserRole.MANAGER && token.role !== UserRole.SUPERADMIN) {
+    if (path.startsWith("/captain") && token.role !== UserRole.CAPTAIN && token.role !== UserRole.MANAGER) {
       return NextResponse.redirect(new URL("/unauthorized", req.url))
     }
 

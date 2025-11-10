@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { UserRole } from "@prisma/client"
+import { UserRole, Gender, PlayerLevel, UserStatus } from "@prisma/client"
+import bcrypt from "bcryptjs"
 
 export async function GET(
   req: NextRequest,
@@ -15,16 +16,18 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const isSuperadmin = session.user.role === UserRole.SUPERADMIN
+    
     const user = await prisma.user.findUnique({
       where: { id: params.id },
       select: {
         id: true,
-        email: session.user.role === UserRole.SUPERADMIN,
+        email: true,
         name: true,
         gender: true,
         level: true,
-        status: session.user.role === UserRole.SUPERADMIN,
-        role: session.user.role === UserRole.SUPERADMIN,
+        status: true,
+        role: true,
         image: true,
         createdAt: true,
         teams: {
@@ -43,6 +46,12 @@ export async function GET(
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
+
+    // Filter sensitive fields if not superadmin
+    if (!isSuperadmin) {
+      const { email, status, role, ...publicUser } = user
+      return NextResponse.json(publicUser)
     }
 
     return NextResponse.json(user)
@@ -65,14 +74,49 @@ export async function PATCH(
 
     const data = await req.json()
 
+    // Prepare update data
+    const updateData: any = {}
+    
+    if (data.name !== undefined) updateData.name = data.name
+    if (data.gender !== undefined) updateData.gender = data.gender as Gender
+    if (data.level !== undefined) updateData.level = data.level as PlayerLevel
+    if (data.role !== undefined) updateData.role = data.role as UserRole
+    if (data.status !== undefined) updateData.status = data.status as UserStatus
+    
+    // Handle email update
+    if (data.email !== undefined) {
+      // Check if email is already taken by another user
+      const existingUser = await prisma.user.findUnique({
+        where: { email: data.email },
+      })
+      
+      if (existingUser && existingUser.id !== params.id) {
+        return NextResponse.json(
+          { error: "Email already taken" },
+          { status: 400 }
+        )
+      }
+      
+      updateData.email = data.email
+    }
+    
+    // Handle password update
+    if (data.password !== undefined && data.password !== "") {
+      updateData.password = await bcrypt.hash(data.password, 10)
+    }
+
     const user = await prisma.user.update({
       where: { id: params.id },
-      data: {
-        ...(data.name && { name: data.name }),
-        ...(data.gender && { gender: data.gender }),
-        ...(data.level && { level: data.level }),
-        ...(data.role && { role: data.role }),
-        ...(data.status && { status: data.status }),
+      data: updateData,
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        gender: true,
+        level: true,
+        status: true,
+        role: true,
+        createdAt: true,
       },
     })
 
