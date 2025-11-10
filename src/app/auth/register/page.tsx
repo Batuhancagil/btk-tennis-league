@@ -8,7 +8,13 @@ import { Gender, PlayerLevel } from "@prisma/client"
 
 function RegisterForm() {
   const router = useRouter()
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    email: string
+    password: string
+    name: string
+    gender: Gender
+    level: PlayerLevel
+  }>({
     email: "",
     password: "",
     name: "",
