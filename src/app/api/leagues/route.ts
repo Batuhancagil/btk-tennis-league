@@ -14,13 +14,19 @@ export async function GET(req: NextRequest) {
 
     const searchParams = req.nextUrl.searchParams
     const status = searchParams.get("status")
+    const publicView = searchParams.get("public") === "true"
 
     const where: any = {}
     if (status) where.status = status
 
-    // Managers see only their leagues, superadmins see all
-    if (session.user.role !== UserRole.SUPERADMIN) {
-      where.managerId = session.user.id
+    // If public view is requested, show all active leagues to all approved users
+    if (publicView) {
+      where.status = LeagueStatus.ACTIVE
+    } else {
+      // Managers see only their leagues, superadmins see all
+      if (session.user.role !== UserRole.SUPERADMIN) {
+        where.managerId = session.user.id
+      }
     }
 
     const leagues = await prisma.league.findMany({

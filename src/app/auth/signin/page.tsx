@@ -3,6 +3,7 @@
 import { signIn } from "next-auth/react"
 import { useSearchParams } from "next/navigation"
 import { Suspense, useState } from "react"
+import Link from "next/link"
 import { Mail, Lock, ArrowRight } from "lucide-react"
 
 function SignInForm() {
@@ -181,6 +182,16 @@ function SignInForm() {
               </svg>
               GitHub ile Giriş Yap
             </button>
+          </div>
+
+          {/* Link to Register */}
+          <div className="mt-6 text-center">
+            <p className="text-sm text-gray-600">
+              Hesabınız yok mu?{" "}
+              <Link href="/auth/register" className="text-tennis-gold font-semibold hover:underline">
+                Kayıt olun
+              </Link>
+            </p>
           </div>
         </div>
 

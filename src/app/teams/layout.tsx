@@ -1,11 +1,11 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
-import { UserRole, UserStatus } from "@prisma/client"
+import { UserStatus } from "@prisma/client"
 import Navbar from "@/components/Navbar"
 import Sidebar from "@/components/Sidebar"
 
-export default async function ManagerLayout({
+export default async function TeamsLayout({
   children,
 }: {
   children: React.ReactNode
@@ -18,10 +18,6 @@ export default async function ManagerLayout({
 
   if (session.user.status !== UserStatus.APPROVED) {
     redirect("/pending")
-  }
-
-  if (session.user.role !== UserRole.MANAGER && session.user.role !== UserRole.SUPERADMIN) {
-    redirect("/unauthorized")
   }
 
   return (

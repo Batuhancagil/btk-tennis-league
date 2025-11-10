@@ -3,6 +3,7 @@ import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { UserRole } from "@prisma/client"
 import Navbar from "@/components/Navbar"
+import Sidebar from "@/components/Sidebar"
 
 export default async function AdminLayout({
   children,
@@ -18,7 +19,8 @@ export default async function AdminLayout({
   return (
     <>
       <Navbar />
-      <div className="pt-20">{children}</div>
+      <Sidebar />
+      <div className="pt-20 pl-64">{children}</div>
     </>
   )
 }

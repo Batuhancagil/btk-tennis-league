@@ -3,6 +3,7 @@ import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import { UserRole, UserStatus } from "@prisma/client"
 import Navbar from "@/components/Navbar"
+import Sidebar from "@/components/Sidebar"
 
 export default async function CaptainLayout({
   children,
@@ -30,7 +31,8 @@ export default async function CaptainLayout({
   return (
     <>
       <Navbar />
-      <div className="pt-20">{children}</div>
+      <Sidebar />
+      <div className="pt-20 pl-64">{children}</div>
     </>
   )
 }

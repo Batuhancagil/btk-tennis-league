@@ -191,7 +191,7 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto px-4 py-8 ml-64">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold">Superadmin Paneli</h1>
           <button
@@ -548,21 +548,51 @@ export default function AdminDashboard() {
                       </select>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <span
-                        className={`px-2 py-1 rounded ${
-                          user.status === "APPROVED"
-                            ? "bg-green-100 text-green-800"
+                      {editingField?.userId === user.id && editingField?.field === "status" ? (
+                        <div className="flex gap-2">
+                          <select
+                            value={editValues.status || user.status}
+                            onChange={(e) => setEditValues({ status: e.target.value })}
+                            className="border rounded px-2 py-1"
+                            autoFocus
+                          >
+                            <option value={UserStatus.PENDING}>Bekliyor</option>
+                            <option value={UserStatus.APPROVED}>Onaylandı</option>
+                            <option value={UserStatus.REJECTED}>Reddedildi</option>
+                          </select>
+                          <button
+                            onClick={() => saveField(user.id, "status")}
+                            disabled={saving}
+                            className="text-green-600 hover:text-green-800"
+                          >
+                            ✓
+                          </button>
+                          <button
+                            onClick={cancelEditing}
+                            className="text-red-600 hover:text-red-800"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <span
+                          className={`px-2 py-1 rounded cursor-pointer hover:opacity-80 ${
+                            user.status === "APPROVED"
+                              ? "bg-green-100 text-green-800"
+                              : user.status === "REJECTED"
+                              ? "bg-red-100 text-red-800"
+                              : "bg-yellow-100 text-yellow-800"
+                          }`}
+                          onClick={() => startEditing(user.id, "status", user.status)}
+                          title="Düzenlemek için tıklayın"
+                        >
+                          {user.status === "APPROVED"
+                            ? "Onaylandı"
                             : user.status === "REJECTED"
-                            ? "bg-red-100 text-red-800"
-                            : "bg-yellow-100 text-yellow-800"
-                        }`}
-                      >
-                        {user.status === "APPROVED"
-                          ? "Onaylandı"
-                          : user.status === "REJECTED"
-                          ? "Reddedildi"
-                          : "Bekliyor"}
-                      </span>
+                            ? "Reddedildi"
+                            : "Bekliyor"}
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       {user.status === "PENDING" && (
