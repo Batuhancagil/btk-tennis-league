@@ -76,6 +76,7 @@ model User {
   id            String      @id @default(cuid())
   email         String      @unique
   name          String
+  password      String?     // Optional for OAuth users
   gender        Gender      @default(MALE)
   level         PlayerLevel @default(D)
   status        UserStatus  @default(PENDING)

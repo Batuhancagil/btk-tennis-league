@@ -108,15 +108,36 @@ npx prisma db push
 npx prisma studio
 ```
 
-### 4. İlk Superadmin Kullanıcısı Oluşturma
+### 4. İlk Superadmin Kullanıcıları Oluşturma
 
-Database'e manuel olarak ilk superadmin kullanıcısını eklemeniz gerekiyor. Prisma Studio veya SQL ile:
+#### Yöntem 1: Script ile (Önerilen)
+
+```bash
+npm run create-superadmin
+```
+
+Bu script şunları yapar:
+- `busra@btk.com` kullanıcısını oluşturur (şifre: `123321`) ve superadmin yapar
+- `cagilbatuhan@gmail.com` kullanıcısını superadmin yapar (eğer Google ile giriş yaptıysa)
+
+#### Yöntem 2: API Endpoint ile
+
+```bash
+curl -X POST http://localhost:3000/api/admin/create-superadmin \
+  -H "Content-Type: application/json" \
+  -d '{"email": "busra@btk.com", "password": "123321", "name": "Busra"}'
+```
+
+#### Yöntem 3: Prisma Studio veya SQL ile
 
 ```sql
--- Örnek: Email ile kullanıcı bulup superadmin yapma
+-- busra@btk.com için (şifre hash'lenmiş olmalı)
+-- Önce bcrypt ile hash'leyin: npm run create-superadmin
+
+-- cagilbatuhan@gmail.com için (Google OAuth ile giriş yaptıktan sonra)
 UPDATE "users" 
 SET "role" = 'SUPERADMIN', "status" = 'APPROVED' 
-WHERE "email" = 'admin@example.com';
+WHERE "email" = 'cagilbatuhan@gmail.com';
 ```
 
 ### 5. Development Server'ı Başlatın
