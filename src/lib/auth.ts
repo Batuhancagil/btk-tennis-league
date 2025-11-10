@@ -165,8 +165,8 @@ export const authOptions: NextAuthOptions = {
           if (token && typeof token === 'object') {
             if (token.id) session.user.id = token.id as string
             if (token.role) session.user.role = token.role as UserRole
-            // Always set status from token if available, even if it's undefined
-            if ('status' in token) {
+            // Set status from token if available
+            if (token.status) {
               session.user.status = token.status as UserStatus
             }
             if (token.gender) session.user.gender = token.gender as any
