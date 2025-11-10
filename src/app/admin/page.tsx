@@ -21,6 +21,14 @@ interface EditingField {
   field: string
 }
 
+interface NewUser {
+  email: string
+  password: string
+  name: string
+  gender: Gender
+  level: PlayerLevel
+}
+
 export default function AdminDashboard() {
   const { data: session } = useSession()
   const [users, setUsers] = useState<User[]>([])
@@ -29,7 +37,7 @@ export default function AdminDashboard() {
   const [editingField, setEditingField] = useState<EditingField | null>(null)
   const [editValues, setEditValues] = useState<Record<string, string>>({})
   const [showAddForm, setShowAddForm] = useState(false)
-  const [newUser, setNewUser] = useState({
+  const [newUser, setNewUser] = useState<NewUser>({
     email: "",
     password: "",
     name: "",
@@ -42,6 +50,7 @@ export default function AdminDashboard() {
     if (session?.user) {
       fetchUsers()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, filter])
 
   const fetchUsers = async () => {
@@ -231,7 +240,10 @@ export default function AdminDashboard() {
                 <label className="block text-sm font-medium mb-1">Cinsiyet</label>
                 <select
                   value={newUser.gender}
-                  onChange={(e) => setNewUser({ ...newUser, gender: e.target.value as Gender })}
+                  onChange={(e) => {
+                    const genderValue = e.target.value as Gender
+                    setNewUser({ ...newUser, gender: genderValue })
+                  }}
                   className="w-full border rounded px-3 py-2"
                 >
                   <option value={Gender.MALE}>Erkek</option>
@@ -242,7 +254,10 @@ export default function AdminDashboard() {
                 <label className="block text-sm font-medium mb-1">Seviye</label>
                 <select
                   value={newUser.level}
-                  onChange={(e) => setNewUser({ ...newUser, level: e.target.value as PlayerLevel })}
+                  onChange={(e) => {
+                    const levelValue = e.target.value as PlayerLevel
+                    setNewUser({ ...newUser, level: levelValue })
+                  }}
                   className="w-full border rounded px-3 py-2"
                 >
                   <option value={PlayerLevel.MASTER}>Master</option>

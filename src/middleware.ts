@@ -29,7 +29,8 @@ export default withAuth(
       return NextResponse.next()
     }
 
-    if (path.startsWith("/admin") && token.role !== UserRole.SUPERADMIN) {
+    // At this point, we know the user is not SUPERADMIN
+    if (path.startsWith("/admin")) {
       return NextResponse.redirect(new URL("/unauthorized", req.url))
     }
 
