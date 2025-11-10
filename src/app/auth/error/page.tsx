@@ -2,8 +2,9 @@
 
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
+import { Suspense } from "react"
 
-export default function AuthErrorPage() {
+function AuthErrorContent() {
   const searchParams = useSearchParams()
   const error = searchParams.get("error")
 
@@ -42,6 +43,30 @@ export default function AuthErrorPage() {
         </div>
       </div>
     </main>
+  )
+}
+
+export default function AuthErrorPage() {
+  return (
+    <Suspense fallback={
+      <main className="flex min-h-screen flex-col items-center justify-center p-24">
+        <div className="z-10 max-w-md w-full">
+          <h1 className="text-4xl font-bold text-center mb-8">
+            BTK Tenis Ligi
+          </h1>
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+            <h2 className="text-xl font-semibold text-red-800 mb-2">
+              Giriş Hatası
+            </h2>
+            <p className="text-red-700 mb-4">
+              Yükleniyor...
+            </p>
+          </div>
+        </div>
+      </main>
+    }>
+      <AuthErrorContent />
+    </Suspense>
   )
 }
 
