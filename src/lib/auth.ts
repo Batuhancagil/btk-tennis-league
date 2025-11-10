@@ -45,8 +45,6 @@ export const authOptions: NextAuthOptions = {
   providers: providers as any,
   secret: process.env.NEXTAUTH_SECRET,
   debug: process.env.NODE_ENV === "development",
-  // Trust proxy for Railway deployment
-  trustHost: true,
   callbacks: {
     async session({ session, user }) {
       if (session.user) {
