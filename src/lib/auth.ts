@@ -83,25 +83,8 @@ export const authOptions: NextAuthOptions = {
       try {
         if (!user.email) return false
 
-        // Check if user exists
-        const existingUser = await prisma.user.findUnique({
-          where: { email: user.email },
-        })
-
-        if (!existingUser) {
-          // Create new user with pending status
-          await prisma.user.create({
-            data: {
-              email: user.email,
-              name: user.name || "User",
-              gender: "MALE", // Default, should be updated in profile
-              role: UserRole.PLAYER,
-              status: UserStatus.PENDING,
-              image: user.image,
-            },
-          })
-        }
-
+        // PrismaAdapter will automatically create User and Account
+        // We just need to allow it to proceed
         return true
       } catch (error) {
         console.error("[NextAuth] SignIn callback error:", error)
