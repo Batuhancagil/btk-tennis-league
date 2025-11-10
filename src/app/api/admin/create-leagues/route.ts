@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
       skipped: skippedLeagues.length,
       season: season,
       leagues: createdLeagues,
-      skipped: skippedLeagues,
+      skippedNames: skippedLeagues,
     })
   } catch (error: any) {
     console.error("Error creating leagues:", error)

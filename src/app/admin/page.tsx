@@ -230,10 +230,17 @@ export default function AdminDashboard() {
 
       const data = await res.json()
       if (res.ok) {
-        alert(`Başarıyla yüklendi!\nEklenen: ${data.created}\nHatalı: ${data.errors?.length || 0}`)
+        let message = `Başarıyla yüklendi!\nEklenen: ${data.created}`
         if (data.errors && data.errors.length > 0) {
-          console.error("Hatalar:", data.errors)
+          message += `\nHatalı satır sayısı: ${data.errors.length}`
+          if (data.errors.length <= 10) {
+            message += `\n\nHatalar:\n${data.errors.join("\n")}`
+          } else {
+            message += `\n\nİlk 10 hata:\n${data.errors.slice(0, 10).join("\n")}\n... ve ${data.errors.length - 10} hata daha`
+            console.error("Tüm hatalar:", data.errors)
+          }
         }
+        alert(message)
         setShowExcelUpload(false)
         fetchUsers()
       } else {

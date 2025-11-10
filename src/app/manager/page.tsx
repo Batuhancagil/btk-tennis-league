@@ -98,6 +98,7 @@ export default function ManagerDashboard() {
       })
       if (res.ok) {
         fetchLeagues()
+        fetchTeams() // Refresh teams list
       } else {
         const error = await res.json()
         alert(error.error || "Hata oluştu")
@@ -341,11 +342,23 @@ export default function ManagerDashboard() {
                         team.category === league.category &&
                         !league.teams.some((lt) => lt.id === team.id)
                     )
-                    .map((team) => (
-                      <option key={team.id} value={team.id}>
-                        {team.name}
-                      </option>
-                    ))}
+                    .length === 0 ? (
+                    <option value="" disabled>
+                      Bu kategori için takım bulunamadı
+                    </option>
+                  ) : (
+                    teams
+                      .filter(
+                        (team) =>
+                          team.category === league.category &&
+                          !league.teams.some((lt) => lt.id === team.id)
+                      )
+                      .map((team) => (
+                        <option key={team.id} value={team.id}>
+                          {team.name}
+                        </option>
+                      ))
+                  )}
                 </select>
                 {league.teams.length >= 2 && league._count.matches === 0 && (
                   <button

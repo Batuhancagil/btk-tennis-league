@@ -4,7 +4,7 @@ import Link from "next/link"
 import { useSession, signOut } from "next-auth/react"
 import { UserRole } from "@prisma/client"
 import { useState, useEffect } from "react"
-import { Menu, X, LogOut, User, ChevronDown } from "lucide-react"
+import { Menu, X, LogOut, User, ChevronDown, Bell } from "lucide-react"
 
 export default function Navbar() {
   const { data: session } = useSession()
@@ -69,7 +69,7 @@ export default function Navbar() {
                 <span className="text-2xl font-bold text-white tracking-tight">BTK</span>
               </div>
             </div>
-            <div className="hidden sm:block relative z-10">
+            <div className="hidden sm:block relative z-20">
               <div className="text-sm font-semibold text-tennis-gold tracking-wide">
                 tennis kommunity
               </div>
@@ -109,6 +109,19 @@ export default function Navbar() {
                   Player
                 </Link>
               </div>
+            )}
+
+            {/* Notifications Link - Show for Players and Captains */}
+            {(session.user.role === UserRole.PLAYER || session.user.role === UserRole.CAPTAIN) && (
+              <Link
+                href="/notifications"
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors group"
+              >
+                <Bell className="w-5 h-5 text-gray-600 group-hover:text-tennis-green transition-colors" />
+                <span className="text-sm font-medium text-gray-700 group-hover:text-tennis-green transition-colors">
+                  Bildirimler
+                </span>
+              </Link>
             )}
 
             {/* User Menu */}
@@ -210,6 +223,16 @@ export default function Navbar() {
                   Player
                 </Link>
               </div>
+            )}
+            {(session.user.role === UserRole.PLAYER || session.user.role === UserRole.CAPTAIN) && (
+              <Link
+                href="/notifications"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors mb-4"
+              >
+                <Bell className="w-5 h-5" />
+                Bildirimler
+              </Link>
             )}
             <div className="px-4 py-3 border-t border-gray-200">
               <div className="flex items-center gap-3 mb-3">

@@ -23,20 +23,32 @@ interface Team {
   }>
 }
 
+interface Invitation {
+  id: string
+  teamId: string
+  playerId: string
+  status: string
+}
+
 export default function CaptainDashboard() {
   const { data: session } = useSession()
   const [teams, setTeams] = useState<Team[]>([])
   const [players, setPlayers] = useState<any[]>([])
+  const [invitations, setInvitations] = useState<Invitation[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreateTeam, setShowCreateTeam] = useState(false)
   const [newTeamName, setNewTeamName] = useState("")
   const [newTeamCategory, setNewTeamCategory] = useState<TeamCategory>(TeamCategory.MALE)
-  const [invitedPlayers, setInvitedPlayers] = useState<Set<string>>(new Set())
+  const [editingTeam, setEditingTeam] = useState<Team | null>(null)
+  const [editTeamName, setEditTeamName] = useState("")
+  const [editTeamCategory, setEditTeamCategory] = useState<TeamCategory>(TeamCategory.MALE)
+  const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (session?.user) {
       fetchTeams()
       fetchPlayers()
+      fetchInvitations()
     }
   }, [session])
 
@@ -61,6 +73,16 @@ export default function CaptainDashboard() {
       setPlayers(data)
     } catch (error) {
       console.error("Error fetching players:", error)
+    }
+  }
+
+  const fetchInvitations = async () => {
+    try {
+      const res = await fetch("/api/invitations")
+      const data = await res.json()
+      setInvitations(data)
+    } catch (error) {
+      console.error("Error fetching invitations:", error)
     }
   }
 
@@ -93,15 +115,92 @@ export default function CaptainDashboard() {
         body: JSON.stringify({ teamId, playerId }),
       })
       if (res.ok) {
-        setInvitedPlayers((prev) => new Set([...prev, `${teamId}-${playerId}`]))
-        // Refresh teams to get updated invitation status
-        fetchTeams()
+        // Refresh invitations to get updated status
+        fetchInvitations()
       } else {
         const error = await res.json()
         alert(error.error || "Hata oluştu")
       }
     } catch (error) {
       console.error("Error inviting player:", error)
+      alert("Hata oluştu")
+    }
+  }
+
+  const isPlayerInvited = (teamId: string, playerId: string) => {
+    return invitations.some(
+      (inv) => inv.teamId === teamId && inv.playerId === playerId && inv.status === "PENDING"
+    )
+  }
+
+  const handleEditTeam = (team: Team) => {
+    setEditingTeam(team)
+    setEditTeamName(team.name)
+    setEditTeamCategory(team.category)
+  }
+
+  const handleSaveTeam = async () => {
+    if (!editingTeam) return
+
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/teams/${editingTeam.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editTeamName,
+          category: editTeamCategory,
+        }),
+      })
+      if (res.ok) {
+        setEditingTeam(null)
+        fetchTeams()
+      } else {
+        const error = await res.json()
+        alert(error.error || "Hata oluştu")
+      }
+    } catch (error) {
+      console.error("Error updating team:", error)
+      alert("Hata oluştu")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleRemovePlayer = async (teamId: string, playerId: string) => {
+    if (!confirm("Oyuncuyu takımdan çıkarmak istediğinize emin misiniz?")) return
+
+    try {
+      const res = await fetch(`/api/teams/${teamId}/players?playerId=${playerId}`, {
+        method: "DELETE",
+      })
+      if (res.ok) {
+        fetchTeams()
+      } else {
+        const error = await res.json()
+        alert(error.error || "Hata oluştu")
+      }
+    } catch (error) {
+      console.error("Error removing player:", error)
+      alert("Hata oluştu")
+    }
+  }
+
+  const handleAddPlayerDirectly = async (teamId: string, playerId: string) => {
+    try {
+      const res = await fetch(`/api/teams/${teamId}/players`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerId }),
+      })
+      if (res.ok) {
+        fetchTeams()
+      } else {
+        const error = await res.json()
+        alert(error.error || "Hata oluştu")
+      }
+    } catch (error) {
+      console.error("Error adding player:", error)
       alert("Hata oluştu")
     }
   }
@@ -174,6 +273,51 @@ export default function CaptainDashboard() {
           </div>
         )}
 
+        {editingTeam && (
+          <div className="bg-white rounded-lg shadow-lg p-6 mb-6 border-2 border-blue-200">
+            <h2 className="text-xl font-semibold mb-4">Takımı Düzenle</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Takım Adı</label>
+                <input
+                  type="text"
+                  value={editTeamName}
+                  onChange={(e) => setEditTeamName(e.target.value)}
+                  className="w-full border rounded px-3 py-2"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Kategori</label>
+                <select
+                  value={editTeamCategory}
+                  onChange={(e) => setEditTeamCategory(e.target.value as TeamCategory)}
+                  className="w-full border rounded px-3 py-2"
+                >
+                  <option value={TeamCategory.MALE}>Erkek</option>
+                  <option value={TeamCategory.FEMALE}>Kadın</option>
+                  <option value={TeamCategory.MIXED}>Mix</option>
+                </select>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSaveTeam}
+                  disabled={saving}
+                  className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:opacity-50"
+                >
+                  {saving ? "Kaydediliyor..." : "Kaydet"}
+                </button>
+                <button
+                  onClick={() => setEditingTeam(null)}
+                  className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+                >
+                  İptal
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="space-y-6">
           {teams.map((team) => (
             <div key={team.id} className="bg-white rounded-lg shadow p-6">
@@ -189,6 +333,12 @@ export default function CaptainDashboard() {
                     Takımı
                   </p>
                 </div>
+                <button
+                  onClick={() => handleEditTeam(team)}
+                  className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                >
+                  Düzenle
+                </button>
               </div>
 
               <div className="mb-4">
@@ -196,8 +346,18 @@ export default function CaptainDashboard() {
                 {team.players.length > 0 ? (
                   <ul className="space-y-2">
                     {team.players.map(({ player }) => (
-                      <li key={player.id} className="p-2 bg-gray-50 rounded">
-                        {player.name} - {player.level} ({player.gender === "MALE" ? "E" : "K"})
+                      <li key={player.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                        <span>
+                          {player.name} - {player.level} ({player.gender === "MALE" ? "E" : "K"})
+                        </span>
+                        {editingTeam?.id === team.id && team.captain.id !== player.id && (
+                          <button
+                            onClick={() => handleRemovePlayer(team.id, player.id)}
+                            className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600"
+                          >
+                            Çıkar
+                          </button>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -222,7 +382,7 @@ export default function CaptainDashboard() {
                       return !team.players.some((tp) => tp.player.id === player.id)
                     })
                     .map((player) => {
-                      const isInvited = invitedPlayers.has(`${team.id}-${player.id}`)
+                      const isInvited = isPlayerInvited(team.id, player.id)
                       return (
                         <div
                           key={player.id}
@@ -231,18 +391,27 @@ export default function CaptainDashboard() {
                           <span className="text-sm">
                             {player.name} ({player.level})
                           </span>
-                          {isInvited ? (
-                            <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded font-medium">
-                              Davet Edildi
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => handleInvitePlayer(team.id, player.id)}
-                              className="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
-                            >
-                              Davet Et
-                            </button>
-                          )}
+                          <div className="flex gap-1">
+                            {editingTeam?.id === team.id ? (
+                              <button
+                                onClick={() => handleAddPlayerDirectly(team.id, player.id)}
+                                className="px-2 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600"
+                              >
+                                Ekle
+                              </button>
+                            ) : isInvited ? (
+                              <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded font-medium">
+                                Davet Edildi
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => handleInvitePlayer(team.id, player.id)}
+                                className="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
+                              >
+                                Davet Et
+                              </button>
+                            )}
+                          </div>
                         </div>
                       )
                     })}
