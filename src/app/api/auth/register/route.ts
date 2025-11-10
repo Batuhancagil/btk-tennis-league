@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
 export async function POST(req: NextRequest) {
   try {
     const data = await req.json()
-    const { email, password, name, gender, level } = data
+    const { email, password, name, gender } = data
 
     // Validate required fields
     if (!email || !password || !name) {
@@ -55,33 +55,17 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Validate level (optional)
-    const validLevels = [
-      PlayerLevel.MASTER,
-      PlayerLevel.A,
-      PlayerLevel.B,
-      PlayerLevel.C,
-      PlayerLevel.D,
-    ]
-    const selectedLevel = level || null
-    if (selectedLevel !== null && !validLevels.includes(selectedLevel as PlayerLevel)) {
-      return NextResponse.json(
-        { error: "Geçerli bir seviye seçiniz" },
-        { status: 400 }
-      )
-    }
-
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10)
 
-    // Create user with PENDING status
+    // Create user with PENDING status (level will be set by superadmin)
     const user = await prisma.user.create({
       data: {
         email,
         password: hashedPassword,
         name,
         gender: gender || null,
-        level: selectedLevel || null,
+        level: null, // Level will be set by superadmin
         role: UserRole.PLAYER,
         status: UserStatus.PENDING,
       },

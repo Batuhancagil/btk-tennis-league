@@ -4,7 +4,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Mail, Lock, User, ArrowRight, CheckCircle } from "lucide-react"
-import { Gender, PlayerLevel } from "@prisma/client"
+import { Gender } from "@prisma/client"
 
 function RegisterForm() {
   const router = useRouter()
@@ -13,13 +13,11 @@ function RegisterForm() {
     password: string
     name: string
     gender: Gender | null
-    level: PlayerLevel | null
   }>({
     email: "",
     password: "",
     name: "",
     gender: null,
-    level: null,
   })
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
@@ -53,7 +51,6 @@ function RegisterForm() {
         password: "",
         name: "",
         gender: null,
-        level: null,
       })
     } catch (err) {
       setError("Bir hata oluştu. Lütfen tekrar deneyin.")
@@ -223,25 +220,6 @@ function RegisterForm() {
                 <option value="">Seçilmedi</option>
                 <option value={Gender.MALE}>Erkek</option>
                 <option value={Gender.FEMALE}>Kadın</option>
-              </select>
-            </div>
-
-            <div>
-              <label htmlFor="level" className="block text-sm font-semibold text-gray-700 mb-2">
-                Seviye
-              </label>
-              <select
-                id="level"
-                value={formData.level || ""}
-                onChange={(e) => setFormData({ ...formData, level: e.target.value ? (e.target.value as PlayerLevel) : null })}
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-tennis-gold focus:border-tennis-gold transition-all bg-white"
-              >
-                <option value="">Seçilmedi</option>
-                <option value={PlayerLevel.MASTER}>Master</option>
-                <option value={PlayerLevel.A}>A</option>
-                <option value={PlayerLevel.B}>B</option>
-                <option value={PlayerLevel.C}>C</option>
-                <option value={PlayerLevel.D}>D</option>
               </select>
             </div>
 

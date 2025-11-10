@@ -27,10 +27,18 @@ export async function POST(req: NextRequest) {
     // Dynamically import xlsx
     const XLSX = await import("xlsx")
     const arrayBuffer = await file.arrayBuffer()
-    const workbook = XLSX.read(arrayBuffer, { type: "array" })
+    // Read Excel file (XLSX library handles UTF-8 automatically)
+    const workbook = XLSX.read(arrayBuffer, { 
+      type: "array",
+    })
     const sheetName = workbook.SheetNames[0]
     const worksheet = workbook.Sheets[sheetName]
-    const data = XLSX.utils.sheet_to_json(worksheet) as any[]
+    // Convert to JSON with proper encoding for Turkish characters
+    // Using raw: false ensures we get formatted text values which preserves UTF-8 characters
+    const data = XLSX.utils.sheet_to_json(worksheet, {
+      raw: false, // Get formatted text values to preserve Turkish characters (ğ, ç, ş, etc.)
+      defval: "", // Default value for empty cells
+    }) as any[]
 
     const created = []
     const errors = []
@@ -39,8 +47,11 @@ export async function POST(req: NextRequest) {
       const row = data[i]
       try {
         // Support both Turkish and English column names
+        // Use String() to ensure proper UTF-8 handling
         const email = String(row.Email || row.email || "").trim()
-        const name = String(row.Oyuncu || row.İsim || row.Name || row.name || "").trim()
+        // Handle Turkish characters properly - ensure UTF-8 encoding
+        const nameRaw = row.Oyuncu || row.İsim || row.Name || row.name || ""
+        const name = typeof nameRaw === 'string' ? nameRaw.trim() : String(nameRaw).trim()
         const genderStr = String(row.Cinsiyet || row.Gender || row.gender || "").trim().toUpperCase()
         const levelStr = String(row.Seviye || row.Level || row.level || "").trim().toUpperCase()
 
