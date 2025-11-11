@@ -45,6 +45,7 @@ export default function CaptainDashboard() {
   const [editTeamCategory, setEditTeamCategory] = useState<TeamCategory>(TeamCategory.MALE)
   const [editTeamMaxPlayers, setEditTeamMaxPlayers] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [showExcelUpload, setShowExcelUpload] = useState(false)
   const [uploadingExcel, setUploadingExcel] = useState(false)
   const [selectedPlayersForInvite, setSelectedPlayersForInvite] = useState<{ [teamId: string]: string[] }>({})
@@ -253,6 +254,32 @@ export default function CaptainDashboard() {
       alert("Hata oluştu")
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleDeleteTeam = async (teamId: string) => {
+    if (!confirm("Bu takımı silmek istediğinize emin misiniz?")) return
+
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/teams/${teamId}`, {
+        method: "DELETE",
+      })
+
+      if (res.ok) {
+        await fetchTeams()
+        if (editingTeam?.id === teamId) {
+          setEditingTeam(null)
+        }
+      } else {
+        const error = await res.json()
+        alert(error.error || "Takım silinirken hata oluştu")
+      }
+    } catch (error) {
+      console.error("Error deleting team:", error)
+      alert("Takım silinirken hata oluştu")
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -627,12 +654,21 @@ export default function CaptainDashboard() {
                     Takımı
                   </p>
                 </div>
-                <button
-                  onClick={() => handleEditTeam(team)}
-                  className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-                >
-                  Düzenle
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleEditTeam(team)}
+                    className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                  >
+                    Düzenle
+                  </button>
+                  <button
+                    onClick={() => handleDeleteTeam(team.id)}
+                    disabled={deleting}
+                    className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50"
+                  >
+                    {deleting ? "Siliniyor..." : "Sil"}
+                  </button>
+                </div>
               </div>
 
               <div className="mb-4">

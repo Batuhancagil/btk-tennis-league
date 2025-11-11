@@ -145,3 +145,55 @@ export async function PATCH(
   }
 }
 
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const session = await getServerSession(authOptions)
+
+    if (!session?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const team = await prisma.team.findUnique({
+      where: { id: params.id },
+    })
+
+    if (!team) {
+      return NextResponse.json({ error: "Team not found" }, { status: 404 })
+    }
+
+    // Only captain of the team, manager, or superadmin can delete
+    if (team.captainId !== session.user.id && session.user.role !== UserRole.SUPERADMIN && session.user.role !== UserRole.MANAGER) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
+    }
+
+    // Check if team has matches (homeMatches or awayMatches)
+    const homeMatchesCount = await prisma.match.count({
+      where: { homeTeamId: params.id },
+    })
+
+    const awayMatchesCount = await prisma.match.count({
+      where: { awayTeamId: params.id },
+    })
+
+    if (homeMatchesCount > 0 || awayMatchesCount > 0) {
+      return NextResponse.json(
+        { error: "Bu takımın maçları bulunmaktadır. Maçları olan takımlar silinemez." },
+        { status: 400 }
+      )
+    }
+
+    // Delete the team (cascade will handle TeamPlayer, Invitation, MatchSquad)
+    await prisma.team.delete({
+      where: { id: params.id },
+    })
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error("Error deleting team:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}
+

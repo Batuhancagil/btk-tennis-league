@@ -63,6 +63,8 @@ export default function ManagerDashboard() {
   const [teamPlayers, setTeamPlayers] = useState<any[]>([])
   const [allPlayers, setAllPlayers] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [selectedTeams, setSelectedTeams] = useState<Set<string>>(new Set())
   const [showExcelUpload, setShowExcelUpload] = useState(false)
   const [uploadingExcel, setUploadingExcel] = useState(false)
 
@@ -148,6 +150,103 @@ export default function ManagerDashboard() {
       alert("Hata oluştu")
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleDeleteTeam = async (teamId: string) => {
+    if (!confirm("Bu takımı silmek istediğinize emin misiniz?")) return
+
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/teams/${teamId}`, {
+        method: "DELETE",
+      })
+
+      if (res.ok) {
+        await fetchLeagues()
+        await fetchTeams()
+        setSelectedTeams((prev) => {
+          const newSet = new Set(prev)
+          newSet.delete(teamId)
+          return newSet
+        })
+        if (editingTeam?.id === teamId) {
+          setEditingTeam(null)
+        }
+      } else {
+        const error = await res.json()
+        alert(error.error || "Takım silinirken hata oluştu")
+      }
+    } catch (error) {
+      console.error("Error deleting team:", error)
+      alert("Takım silinirken hata oluştu")
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const handleSelectTeam = (teamId: string) => {
+    setSelectedTeams((prev) => {
+      const newSet = new Set(prev)
+      if (newSet.has(teamId)) {
+        newSet.delete(teamId)
+      } else {
+        newSet.add(teamId)
+      }
+      return newSet
+    })
+  }
+
+  const handleSelectAllTeams = () => {
+    const allTeamIds = new Set<string>()
+    leagues.forEach((league) => {
+      league.teams.forEach((team) => {
+        allTeamIds.add(team.id)
+      })
+    })
+    
+    if (selectedTeams.size === allTeamIds.size) {
+      setSelectedTeams(new Set())
+    } else {
+      setSelectedTeams(allTeamIds)
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedTeams.size === 0) return
+
+    const count = selectedTeams.size
+    if (!confirm(`${count} takımı silmek istediğinize emin misiniz?`)) return
+
+    setDeleting(true)
+    try {
+      const res = await fetch("/api/teams", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teamIds: Array.from(selectedTeams) }),
+      })
+
+      if (res.ok) {
+        const result = await res.json()
+        await fetchLeagues()
+        await fetchTeams()
+        setSelectedTeams(new Set())
+        
+        if (result.failed && result.failed.length > 0) {
+          const failedMessages = result.failed.map((f: any) => `${f.teamId}: ${f.reason}`).join("\n")
+          alert(`Bazı takımlar silinemedi:\n${failedMessages}`)
+        } else {
+          alert(`${result.successful.length} takım başarıyla silindi`)
+        }
+      } else {
+        const error = await res.json()
+        alert(error.error || "Takımlar silinirken hata oluştu")
+      }
+    } catch (error) {
+      console.error("Error bulk deleting teams:", error)
+      alert("Takımlar silinirken hata oluştu")
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -377,6 +476,15 @@ export default function ManagerDashboard() {
             <p className="text-gray-600">Liglerinizi yönetin ve fikstür oluşturun</p>
           </div>
           <div className="flex gap-3">
+            {selectedTeams.size > 0 && (
+              <button
+                onClick={handleBulkDelete}
+                disabled={deleting}
+                className="px-6 py-3 bg-red-500 text-white rounded-xl font-semibold hover:bg-red-600 transition-all disabled:opacity-50"
+              >
+                {deleting ? "Siliniyor..." : `Seçilenleri Sil (${selectedTeams.size})`}
+              </button>
+            )}
             <button
               onClick={() => setShowExcelUpload(!showExcelUpload)}
               className="px-6 py-3 bg-purple-500 text-white rounded-xl font-semibold hover:bg-purple-600 transition-all"
@@ -618,6 +726,18 @@ export default function ManagerDashboard() {
           </div>
         )}
 
+        {leagues.some((league) => league.teams.length > 0) && (
+          <div className="mb-4 flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={selectedTeams.size > 0 && selectedTeams.size === leagues.reduce((acc, league) => acc + league.teams.length, 0)}
+              onChange={handleSelectAllTeams}
+              className="w-4 h-4"
+            />
+            <label className="text-sm text-gray-700">Tümünü Seç</label>
+          </div>
+        )}
+
         <div className="space-y-6">
           {leagues.map((league) => (
             <div key={league.id} className="bg-white rounded-xl shadow-lg p-6 border border-gray-200 hover:shadow-xl transition-shadow">
@@ -672,9 +792,17 @@ export default function ManagerDashboard() {
                     {league.teams.map((team) => (
                       <div
                         key={team.id}
-                        className="flex items-center justify-between p-3 bg-gradient-to-r from-tennis-green/5 to-tennis-green/10 rounded-lg border border-tennis-green/20"
+                        className="flex items-center justify-between p-3 bg-gradient-to-r from-tennis-green/5 to-tennis-green/10 rounded-lg border border-tennis-green/20 relative"
                       >
-                        <span className="text-sm font-medium text-gray-900">{team.name}</span>
+                        <div className="flex items-center gap-2 flex-1">
+                          <input
+                            type="checkbox"
+                            checked={selectedTeams.has(team.id)}
+                            onChange={() => handleSelectTeam(team.id)}
+                            className="w-4 h-4"
+                          />
+                          <span className="text-sm font-medium text-gray-900">{team.name}</span>
+                        </div>
                         <div className="flex gap-2">
                           <button
                             onClick={() => handleEditTeam(team.id)}
@@ -684,9 +812,16 @@ export default function ManagerDashboard() {
                           </button>
                           <button
                             onClick={() => handleRemoveTeam(league.id, team.id)}
-                            className="px-3 py-1 bg-red-500 text-white text-xs rounded-lg hover:bg-red-600 transition-colors font-medium"
+                            className="px-3 py-1 bg-orange-500 text-white text-xs rounded-lg hover:bg-orange-600 transition-colors font-medium"
                           >
                             Çıkar
+                          </button>
+                          <button
+                            onClick={() => handleDeleteTeam(team.id)}
+                            disabled={deleting}
+                            className="px-3 py-1 bg-red-500 text-white text-xs rounded-lg hover:bg-red-600 transition-colors font-medium disabled:opacity-50"
+                          >
+                            {deleting ? "..." : "Sil"}
                           </button>
                         </div>
                       </div>
