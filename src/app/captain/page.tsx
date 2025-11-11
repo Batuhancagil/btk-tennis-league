@@ -1,7 +1,7 @@
 "use client"
 
 import { useSession } from "next-auth/react"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import Navbar from "@/components/Navbar"
 import { TeamCategory } from "@prisma/client"
 
@@ -49,15 +49,7 @@ export default function CaptainDashboard() {
   const [searchQuery, setSearchQuery] = useState<{ [teamId: string]: string }>({})
   const [dropdownOpen, setDropdownOpen] = useState<{ [teamId: string]: boolean }>({})
 
-  useEffect(() => {
-    if (session?.user) {
-      fetchTeams()
-      fetchPlayers()
-      fetchInvitations()
-    }
-  }, [session])
-
-  const fetchTeams = async () => {
+  const fetchTeams = useCallback(async () => {
     try {
       const res = await fetch("/api/teams")
       const data = await res.json()
@@ -69,9 +61,9 @@ export default function CaptainDashboard() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [session?.user?.id])
 
-  const fetchPlayers = async () => {
+  const fetchPlayers = useCallback(async () => {
     try {
       const res = await fetch("/api/users?status=APPROVED")
       const data = await res.json()
@@ -79,9 +71,9 @@ export default function CaptainDashboard() {
     } catch (error) {
       console.error("Error fetching players:", error)
     }
-  }
+  }, [])
 
-  const fetchInvitations = async () => {
+  const fetchInvitations = useCallback(async () => {
     try {
       const res = await fetch("/api/invitations")
       const data = await res.json()
@@ -89,7 +81,15 @@ export default function CaptainDashboard() {
     } catch (error) {
       console.error("Error fetching invitations:", error)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    if (session?.user) {
+      fetchTeams()
+      fetchPlayers()
+      fetchInvitations()
+    }
+  }, [session, fetchTeams, fetchPlayers, fetchInvitations])
 
   const handleCreateTeam = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -355,15 +355,6 @@ export default function CaptainDashboard() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Navbar />
-        <div className="container mx-auto px-4 py-8">Yükleniyor...</div>
-      </div>
-    )
-  }
-
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -379,6 +370,15 @@ export default function CaptainDashboard() {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [dropdownOpen])
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navbar />
+        <div className="container mx-auto px-4 py-8">Yükleniyor...</div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">

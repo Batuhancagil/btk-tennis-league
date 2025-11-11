@@ -1,7 +1,7 @@
 "use client"
 
 import { useSession } from "next-auth/react"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useParams } from "next/navigation"
 import Navbar from "@/components/Navbar"
 import Link from "next/link"
@@ -51,20 +51,7 @@ export default function LeagueDetailPage() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<MatchStatus | "ALL">("ALL")
 
-  useEffect(() => {
-    if (session?.user && leagueId) {
-      fetchLeague()
-      fetchMatches()
-    }
-  }, [session, leagueId, filter])
-
-  useEffect(() => {
-    if (matches.length > 0) {
-      calculateTable()
-    }
-  }, [matches])
-
-  const fetchLeague = async () => {
+  const fetchLeague = useCallback(async () => {
     try {
       const res = await fetch(`/api/leagues/${leagueId}`)
       const data = await res.json()
@@ -74,9 +61,9 @@ export default function LeagueDetailPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [leagueId])
 
-  const fetchMatches = async () => {
+  const fetchMatches = useCallback(async () => {
     try {
       const statusParam = filter === "ALL" ? "" : `?status=${filter}`
       const res = await fetch(`/api/matches?leagueId=${leagueId}${statusParam}`)
@@ -85,9 +72,9 @@ export default function LeagueDetailPage() {
     } catch (error) {
       console.error("Error fetching matches:", error)
     }
-  }
+  }, [leagueId, filter])
 
-  const calculateTable = () => {
+  const calculateTable = useCallback(() => {
     if (!league) return
 
     const tableMap = new Map<string, LeagueTableEntry>()
@@ -151,7 +138,20 @@ export default function LeagueDetailPage() {
     })
 
     setTable(sortedTable)
-  }
+  }, [league, matches])
+
+  useEffect(() => {
+    if (session?.user && leagueId) {
+      fetchLeague()
+      fetchMatches()
+    }
+  }, [session, leagueId, filter, fetchLeague, fetchMatches])
+
+  useEffect(() => {
+    if (matches.length > 0 && league) {
+      calculateTable()
+    }
+  }, [matches, league, calculateTable])
 
   const handleApproveMatch = async (matchId: string) => {
     try {

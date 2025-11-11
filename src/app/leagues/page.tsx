@@ -1,7 +1,7 @@
 "use client"
 
 import { useSession } from "next-auth/react"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { LeagueStatus, LeagueType, TeamCategory } from "@prisma/client"
 import Link from "next/link"
 
@@ -36,13 +36,7 @@ export default function LeaguesPage() {
   const [filterStatus, setFilterStatus] = useState<LeagueStatus | "ALL">("ALL")
   const [filterCategory, setFilterCategory] = useState<TeamCategory | "ALL">("ALL")
 
-  useEffect(() => {
-    if (session?.user) {
-      fetchLeagues()
-    }
-  }, [session, filterStatus, filterCategory])
-
-  const fetchLeagues = async () => {
+  const fetchLeagues = useCallback(async () => {
     try {
       const params = new URLSearchParams()
       params.append("public", "true")
@@ -65,7 +59,13 @@ export default function LeaguesPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [filterStatus, filterCategory])
+
+  useEffect(() => {
+    if (session?.user) {
+      fetchLeagues()
+    }
+  }, [session, fetchLeagues])
 
   const getStatusColor = (status: LeagueStatus) => {
     switch (status) {

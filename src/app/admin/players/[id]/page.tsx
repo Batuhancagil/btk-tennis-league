@@ -1,7 +1,7 @@
 "use client"
 
 import { useSession } from "next-auth/react"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { MatchStatus, UserRole } from "@prisma/client"
@@ -73,20 +73,7 @@ export default function PlayerDetailPage() {
     losses: 0,
   })
 
-  useEffect(() => {
-    if (session?.user) {
-      // Check if user is super admin
-      if (session.user.role !== UserRole.SUPERADMIN) {
-        router.push("/unauthorized")
-        return
-      }
-      fetchProfile()
-      fetchInvitations()
-      fetchMatchStats()
-    }
-  }, [session, playerId, router])
-
-  const fetchMatchStats = async () => {
+  const fetchMatchStats = useCallback(async () => {
     try {
       const res = await fetch("/api/matches")
       const data = await res.json()
@@ -129,9 +116,9 @@ export default function PlayerDetailPage() {
     } catch (error) {
       console.error("Error fetching match stats:", error)
     }
-  }
+  }, [playerId])
 
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
     try {
       const res = await fetch(`/api/users/${playerId}`)
       const data = await res.json()
@@ -141,9 +128,9 @@ export default function PlayerDetailPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [playerId])
 
-  const fetchInvitations = async () => {
+  const fetchInvitations = useCallback(async () => {
     try {
       const res = await fetch("/api/invitations")
       const data = await res.json()
@@ -164,7 +151,20 @@ export default function PlayerDetailPage() {
     } catch (error) {
       console.error("Error fetching invitations:", error)
     }
-  }
+  }, [playerId])
+
+  useEffect(() => {
+    if (session?.user) {
+      // Check if user is super admin
+      if (session.user.role !== UserRole.SUPERADMIN) {
+        router.push("/unauthorized")
+        return
+      }
+      fetchProfile()
+      fetchInvitations()
+      fetchMatchStats()
+    }
+  }, [session, playerId, router, fetchProfile, fetchInvitations, fetchMatchStats])
 
   const handleInvitationResponse = async (invitationId: string, accept: boolean) => {
     try {

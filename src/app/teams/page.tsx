@@ -1,7 +1,7 @@
 "use client"
 
 import { useSession } from "next-auth/react"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { TeamCategory } from "@prisma/client"
 
 interface Team {
@@ -33,13 +33,7 @@ export default function TeamsPage() {
   const [loading, setLoading] = useState(true)
   const [filterCategory, setFilterCategory] = useState<TeamCategory | "ALL">("ALL")
 
-  useEffect(() => {
-    if (session?.user) {
-      fetchTeams()
-    }
-  }, [session, filterCategory])
-
-  const fetchTeams = async () => {
+  const fetchTeams = useCallback(async () => {
     try {
       const categoryParam = filterCategory !== "ALL" ? `?category=${filterCategory}` : ""
       const res = await fetch(`/api/teams${categoryParam}`)
@@ -50,7 +44,13 @@ export default function TeamsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [filterCategory])
+
+  useEffect(() => {
+    if (session?.user) {
+      fetchTeams()
+    }
+  }, [session, fetchTeams])
 
   if (loading) {
     return (

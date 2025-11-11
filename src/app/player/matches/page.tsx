@@ -1,7 +1,7 @@
 "use client"
 
 import { useSession } from "next-auth/react"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import Navbar from "@/components/Navbar"
 import Link from "next/link"
 import { MatchStatus, MatchType } from "@prisma/client"
@@ -45,19 +45,7 @@ export default function PlayerMatchesPage() {
     draws: 0,
   })
 
-  useEffect(() => {
-    if (session?.user) {
-      fetchMatches()
-    }
-  }, [session])
-
-  useEffect(() => {
-    if (matches.length > 0) {
-      calculateStats()
-    }
-  }, [matches])
-
-  const fetchMatches = async () => {
+  const fetchMatches = useCallback(async () => {
     try {
       const res = await fetch("/api/matches")
       const data = await res.json()
@@ -71,9 +59,9 @@ export default function PlayerMatchesPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [session?.user?.id])
 
-  const calculateStats = () => {
+  const calculateStats = useCallback(() => {
     const playedMatches = matches.filter(
       (m) => m.status === MatchStatus.PLAYED && m.homeScore !== null && m.awayScore !== null
     )
@@ -105,7 +93,19 @@ export default function PlayerMatchesPage() {
       losses,
       draws,
     })
-  }
+  }, [matches, session?.user?.id])
+
+  useEffect(() => {
+    if (session?.user) {
+      fetchMatches()
+    }
+  }, [session, fetchMatches])
+
+  useEffect(() => {
+    if (matches.length > 0) {
+      calculateStats()
+    }
+  }, [matches, calculateStats])
 
   if (loading) {
     return (

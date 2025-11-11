@@ -1,7 +1,7 @@
 "use client"
 
 import { useSession } from "next-auth/react"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import Navbar from "@/components/Navbar"
 import { MatchType, MatchStatus } from "@prisma/client"
 import Link from "next/link"
@@ -47,14 +47,7 @@ export default function CaptainMatchesPage() {
   const [homeScore, setHomeScore] = useState("")
   const [awayScore, setAwayScore] = useState("")
 
-  useEffect(() => {
-    if (session?.user) {
-      fetchTeams()
-      fetchMatches()
-    }
-  }, [session])
-
-  const fetchTeams = async () => {
+  const fetchTeams = useCallback(async () => {
     try {
       const res = await fetch("/api/teams")
       const data = await res.json()
@@ -63,9 +56,9 @@ export default function CaptainMatchesPage() {
     } catch (error) {
       console.error("Error fetching teams:", error)
     }
-  }
+  }, [session?.user?.id])
 
-  const fetchMatches = async () => {
+  const fetchMatches = useCallback(async () => {
     try {
       const res = await fetch("/api/matches")
       const data = await res.json()
@@ -80,13 +73,19 @@ export default function CaptainMatchesPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [teams])
+
+  useEffect(() => {
+    if (session?.user) {
+      fetchTeams()
+    }
+  }, [session, fetchTeams])
 
   useEffect(() => {
     if (teams.length > 0) {
       fetchMatches()
     }
-  }, [teams])
+  }, [teams, fetchMatches])
 
   const handleSetSquad = async (matchId: string, teamId: string) => {
     // This would open a modal to select players

@@ -1,7 +1,7 @@
 "use client"
 
 import { useSession } from "next-auth/react"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
 import { MatchStatus } from "@prisma/client"
 
@@ -53,15 +53,7 @@ export default function PlayerDashboard() {
     losses: 0,
   })
 
-  useEffect(() => {
-    if (session?.user) {
-      fetchProfile()
-      fetchInvitations()
-      fetchMatchStats()
-    }
-  }, [session])
-
-  const fetchMatchStats = async () => {
+  const fetchMatchStats = useCallback(async () => {
     try {
       const res = await fetch("/api/matches")
       const data = await res.json()
@@ -104,9 +96,9 @@ export default function PlayerDashboard() {
     } catch (error) {
       console.error("Error fetching match stats:", error)
     }
-  }
+  }, [session?.user?.id])
 
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
     try {
       const res = await fetch(`/api/users/${session?.user.id}`)
       const data = await res.json()
@@ -116,9 +108,9 @@ export default function PlayerDashboard() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [session?.user?.id])
 
-  const fetchInvitations = async () => {
+  const fetchInvitations = useCallback(async () => {
     try {
       const res = await fetch("/api/invitations")
       const data = await res.json()
@@ -126,7 +118,15 @@ export default function PlayerDashboard() {
     } catch (error) {
       console.error("Error fetching invitations:", error)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    if (session?.user) {
+      fetchProfile()
+      fetchInvitations()
+      fetchMatchStats()
+    }
+  }, [session, fetchProfile, fetchInvitations, fetchMatchStats])
 
   const handleInvitationResponse = async (invitationId: string, accept: boolean) => {
     try {

@@ -3,6 +3,7 @@
 import { useSession } from "next-auth/react"
 import { useEffect, useState } from "react"
 import { Gender, PlayerLevel } from "@prisma/client"
+import Image from "next/image"
 
 interface Player {
   id: string
@@ -133,9 +134,11 @@ export default function PlayersPage() {
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center gap-3">
                             {player.image ? (
-                              <img
+                              <Image
                                 src={player.image}
                                 alt={player.name}
+                                width={40}
+                                height={40}
                                 className="w-10 h-10 rounded-full"
                               />
                             ) : (
