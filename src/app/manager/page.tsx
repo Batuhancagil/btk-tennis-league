@@ -59,6 +59,8 @@ export default function ManagerDashboard() {
   const [teamPlayers, setTeamPlayers] = useState<any[]>([])
   const [allPlayers, setAllPlayers] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
+  const [showExcelUpload, setShowExcelUpload] = useState(false)
+  const [uploadingExcel, setUploadingExcel] = useState(false)
 
   useEffect(() => {
     if (session?.user) {
@@ -280,6 +282,69 @@ export default function ManagerDashboard() {
     }
   }
 
+  const handleDownloadTemplate = async () => {
+    try {
+      const res = await fetch("/api/manager/download-template")
+      if (!res.ok) {
+        throw new Error("Template indirme başarısız")
+      }
+
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = "lig-template.xlsx"
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+    } catch (error) {
+      console.error("Error downloading template:", error)
+      alert("Template indirme sırasında bir hata oluştu")
+    }
+  }
+
+  const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploadingExcel(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+
+      const res = await fetch("/api/manager/upload-leagues", {
+        method: "POST",
+        body: formData,
+      })
+
+      const data = await res.json()
+      if (res.ok) {
+        let message = `Başarıyla yüklendi!\nEklenen: ${data.created}`
+        if (data.errors && data.errors.length > 0) {
+          message += `\nHatalı satır sayısı: ${data.errors.length}`
+          if (data.errors.length <= 10) {
+            message += `\n\nHatalar:\n${data.errors.join("\n")}`
+          } else {
+            message += `\n\nİlk 10 hata:\n${data.errors.slice(0, 10).join("\n")}\n... ve ${data.errors.length - 10} hata daha`
+            console.error("Tüm hatalar:", data.errors)
+          }
+        }
+        alert(message)
+        setShowExcelUpload(false)
+        await fetchLeagues()
+      } else {
+        alert(data.error || "Yükleme başarısız")
+      }
+    } catch (error) {
+      console.error("Error uploading Excel:", error)
+      alert("Yükleme sırasında bir hata oluştu")
+    } finally {
+      setUploadingExcel(false)
+      e.target.value = ""
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
@@ -303,40 +368,79 @@ export default function ManagerDashboard() {
             <h1 className="text-4xl font-bold text-gray-900 mb-2">Lig Yöneticisi Paneli</h1>
             <p className="text-gray-600">Liglerinizi yönetin ve fikstür oluşturun</p>
           </div>
-          <button
-            onClick={() => setShowCreateLeague(true)}
-            className="px-6 py-3 bg-tennis-gold text-tennis-black rounded-xl font-semibold hover:bg-tennis-gold/90 transition-all tennis-shadow-gold"
-          >
-            Yeni Lig Oluştur
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowExcelUpload(!showExcelUpload)}
+              className="px-6 py-3 bg-purple-500 text-white rounded-xl font-semibold hover:bg-purple-600 transition-all"
+            >
+              {showExcelUpload ? "İptal" : "📊 Excel ile Yükle"}
+            </button>
+            <button
+              onClick={() => setShowCreateLeague(true)}
+              className="px-6 py-3 bg-tennis-gold text-tennis-black rounded-xl font-semibold hover:bg-tennis-gold/90 transition-all tennis-shadow-gold"
+            >
+              Yeni Lig Oluştur
+            </button>
+          </div>
         </div>
+
+        {showExcelUpload && (
+          <div className="bg-white rounded-lg shadow p-4 mb-6">
+            <h2 className="text-lg font-semibold mb-4">Excel ile Lig Yükle</h2>
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">
+                Excel dosyası formatı: <strong>Lig Adı</strong>, <strong>Lig Tipi</strong> (INTRA_TEAM/CLUB veya Takım İçi/Kulüp Ligi), <strong>Kategori</strong> (MALE/FEMALE/MIXED veya Erkek/Kadın/Mix), <strong>Sezon</strong>
+              </p>
+              <p className="text-xs text-gray-500 mb-3">
+                Not: Lig adı ve sezon zorunludur.
+              </p>
+              <button
+                onClick={handleDownloadTemplate}
+                className="px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 text-sm mb-3"
+              >
+                📥 Template İndir
+              </button>
+            </div>
+            <input
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleExcelUpload}
+              disabled={uploadingExcel}
+              className="mb-4"
+            />
+            {uploadingExcel && <p className="text-blue-600">Yükleniyor...</p>}
+          </div>
+        )}
 
         {editingTeam && (
           <div className="bg-white rounded-xl shadow-lg p-6 mb-6 border-2 border-blue-200">
             <h2 className="text-2xl font-bold text-gray-900 mb-6">Takımı Düzenle</h2>
             <div className="space-y-5">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Takım Adı</label>
-                <input
-                  type="text"
-                  value={editTeamName}
-                  onChange={(e) => setEditTeamName(e.target.value)}
-                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-tennis-gold focus:border-tennis-gold transition-all"
-                  required
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Takım Adı</label>
+                  <input
+                    type="text"
+                    value={editTeamName}
+                    onChange={(e) => setEditTeamName(e.target.value)}
+                    className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-tennis-gold focus:border-tennis-gold transition-all"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Kategori</label>
+                  <select
+                    value={editTeamCategory}
+                    onChange={(e) => setEditTeamCategory(e.target.value as TeamCategory)}
+                    className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-tennis-gold focus:border-tennis-gold transition-all"
+                  >
+                    <option value={TeamCategory.MALE}>Erkek</option>
+                    <option value={TeamCategory.FEMALE}>Kadın</option>
+                    <option value={TeamCategory.MIXED}>Mix</option>
+                  </select>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Kategori</label>
-                <select
-                  value={editTeamCategory}
-                  onChange={(e) => setEditTeamCategory(e.target.value as TeamCategory)}
-                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-tennis-gold focus:border-tennis-gold transition-all"
-                >
-                  <option value={TeamCategory.MALE}>Erkek</option>
-                  <option value={TeamCategory.FEMALE}>Kadın</option>
-                  <option value={TeamCategory.MIXED}>Mix</option>
-                </select>
-              </div>
+              
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Takım Üyeleri</label>
                 <div className="space-y-2 mb-4">
@@ -395,6 +499,7 @@ export default function ManagerDashboard() {
                   </select>
                 </div>
               </div>
+              
               <div className="flex gap-3">
                 <button
                   onClick={handleSaveTeam}

@@ -43,6 +43,11 @@ export default function CaptainDashboard() {
   const [editTeamName, setEditTeamName] = useState("")
   const [editTeamCategory, setEditTeamCategory] = useState<TeamCategory>(TeamCategory.MALE)
   const [saving, setSaving] = useState(false)
+  const [showExcelUpload, setShowExcelUpload] = useState(false)
+  const [uploadingExcel, setUploadingExcel] = useState(false)
+  const [selectedPlayersForInvite, setSelectedPlayersForInvite] = useState<{ [teamId: string]: string[] }>({})
+  const [searchQuery, setSearchQuery] = useState<{ [teamId: string]: string }>({})
+  const [dropdownOpen, setDropdownOpen] = useState<{ [teamId: string]: boolean }>({})
 
   useEffect(() => {
     if (session?.user) {
@@ -127,16 +132,94 @@ export default function CaptainDashboard() {
     }
   }
 
+  const handleInviteSelectedPlayers = async (teamId: string) => {
+    const selectedIds = selectedPlayersForInvite[teamId] || []
+    if (selectedIds.length === 0) {
+      alert("Lütfen en az bir oyuncu seçin")
+      return
+    }
+
+    try {
+      const res = await fetch("/api/invitations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teamId, playerIds: selectedIds }),
+      })
+      
+      const data = await res.json()
+      if (res.ok) {
+        let message = `${data.created || selectedIds.length} oyuncu davet edildi`
+        if (data.errors && data.errors.length > 0) {
+          message += `\nHatalar: ${data.errors.length}`
+          if (data.errors.length <= 5) {
+            message += `\n${data.errors.join("\n")}`
+          }
+        }
+        alert(message)
+        // Clear selections and search
+        setSelectedPlayersForInvite(prev => ({ ...prev, [teamId]: [] }))
+        setSearchQuery(prev => ({ ...prev, [teamId]: "" }))
+        setDropdownOpen(prev => ({ ...prev, [teamId]: false }))
+        fetchInvitations()
+      } else {
+        alert(data.error || "Hata oluştu")
+      }
+    } catch (error) {
+      console.error("Error inviting players:", error)
+      alert("Hata oluştu")
+    }
+  }
+
+  const togglePlayerSelection = (teamId: string, playerId: string) => {
+    setSelectedPlayersForInvite(prev => {
+      const current = prev[teamId] || []
+      if (current.includes(playerId)) {
+        return { ...prev, [teamId]: current.filter(id => id !== playerId) }
+      } else {
+        return { ...prev, [teamId]: [...current, playerId] }
+      }
+    })
+  }
+
+  const getAvailablePlayers = (team: Team) => {
+    return players.filter((player) => {
+      // Filter players based on team category
+      if (team.category === TeamCategory.MALE && player.gender !== "MALE") {
+        return false
+      }
+      if (team.category === TeamCategory.FEMALE && player.gender !== "FEMALE") {
+        return false
+      }
+      // Check if player is already in team
+      if (team.players.some((tp) => tp.player.id === player.id)) {
+        return false
+      }
+      // Filter by search query
+      const query = (searchQuery[team.id] || "").toLowerCase()
+      if (query && !player.name.toLowerCase().includes(query)) {
+        return false
+      }
+      return true
+    })
+  }
+
   const isPlayerInvited = (teamId: string, playerId: string) => {
     return invitations.some(
       (inv) => inv.teamId === teamId && inv.playerId === playerId
     )
   }
 
-  const handleEditTeam = (team: Team) => {
-    setEditingTeam(team)
-    setEditTeamName(team.name)
-    setEditTeamCategory(team.category)
+  const handleEditTeam = async (team: Team) => {
+    try {
+      const res = await fetch(`/api/teams/${team.id}`)
+      const data = await res.json()
+      setEditingTeam(data)
+      setEditTeamName(data.name)
+      setEditTeamCategory(data.category)
+    } catch (error) {
+      console.error("Error fetching team:", error)
+      alert("Takım bilgileri yüklenirken hata oluştu")
+    }
   }
 
   const handleSaveTeam = async () => {
@@ -194,6 +277,10 @@ export default function CaptainDashboard() {
         body: JSON.stringify({ playerId }),
       })
       if (res.ok) {
+        // Refresh team data if editing
+        if (editingTeam && editingTeam.id === teamId) {
+          await handleEditTeam(editingTeam)
+        }
         fetchTeams()
       } else {
         const error = await res.json()
@@ -202,6 +289,69 @@ export default function CaptainDashboard() {
     } catch (error) {
       console.error("Error adding player:", error)
       alert("Hata oluştu")
+    }
+  }
+
+  const handleDownloadTemplate = async () => {
+    try {
+      const res = await fetch("/api/captain/download-template")
+      if (!res.ok) {
+        throw new Error("Template indirme başarısız")
+      }
+
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = "takim-template.xlsx"
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+    } catch (error) {
+      console.error("Error downloading template:", error)
+      alert("Template indirme sırasında bir hata oluştu")
+    }
+  }
+
+  const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploadingExcel(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+
+      const res = await fetch("/api/captain/upload-teams", {
+        method: "POST",
+        body: formData,
+      })
+
+      const data = await res.json()
+      if (res.ok) {
+        let message = `Başarıyla yüklendi!\nEklenen: ${data.created}`
+        if (data.errors && data.errors.length > 0) {
+          message += `\nHatalı satır sayısı: ${data.errors.length}`
+          if (data.errors.length <= 10) {
+            message += `\n\nHatalar:\n${data.errors.join("\n")}`
+          } else {
+            message += `\n\nİlk 10 hata:\n${data.errors.slice(0, 10).join("\n")}\n... ve ${data.errors.length - 10} hata daha`
+            console.error("Tüm hatalar:", data.errors)
+          }
+        }
+        alert(message)
+        setShowExcelUpload(false)
+        await fetchTeams()
+      } else {
+        alert(data.error || "Yükleme başarısız")
+      }
+    } catch (error) {
+      console.error("Error uploading Excel:", error)
+      alert("Yükleme sırasında bir hata oluştu")
+    } finally {
+      setUploadingExcel(false)
+      e.target.value = ""
     }
   }
 
@@ -214,19 +364,71 @@ export default function CaptainDashboard() {
     )
   }
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement
+      if (!target.closest('.dropdown-container')) {
+        Object.keys(dropdownOpen).forEach(teamId => {
+          if (dropdownOpen[teamId]) {
+            setDropdownOpen(prev => ({ ...prev, [teamId]: false }))
+          }
+        })
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [dropdownOpen])
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Navbar />
       <div className="container mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold">Kaptan Paneli</h1>
-          <button
-            onClick={() => setShowCreateTeam(true)}
-            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-          >
-            Yeni Takım Oluştur
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowExcelUpload(!showExcelUpload)}
+              className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600"
+            >
+              {showExcelUpload ? "İptal" : "📊 Excel ile Yükle"}
+            </button>
+            <button
+              onClick={() => setShowCreateTeam(true)}
+              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            >
+              Yeni Takım Oluştur
+            </button>
+          </div>
         </div>
+
+        {showExcelUpload && (
+          <div className="bg-white rounded-lg shadow p-4 mb-6">
+            <h2 className="text-lg font-semibold mb-4">Excel ile Takım Yükle</h2>
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">
+                Excel dosyası formatı: <strong>Takım Adı</strong>, <strong>Kategori</strong> (MALE/FEMALE/MIXED veya Erkek/Kadın/Mix)
+              </p>
+              <p className="text-xs text-gray-500 mb-3">
+                Not: Takım adı zorunludur.
+              </p>
+              <button
+                onClick={handleDownloadTemplate}
+                className="px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 text-sm mb-3"
+              >
+                📥 Template İndir
+              </button>
+            </div>
+            <input
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleExcelUpload}
+              disabled={uploadingExcel}
+              className="mb-4"
+            />
+            {uploadingExcel && <p className="text-blue-600">Yükleniyor...</p>}
+          </div>
+        )}
 
         {showCreateTeam && (
           <div className="bg-white rounded-lg shadow p-6 mb-6">
@@ -277,28 +479,90 @@ export default function CaptainDashboard() {
           <div className="bg-white rounded-lg shadow-lg p-6 mb-6 border-2 border-blue-200">
             <h2 className="text-xl font-semibold mb-4">Takımı Düzenle</h2>
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">Takım Adı</label>
-                <input
-                  type="text"
-                  value={editTeamName}
-                  onChange={(e) => setEditTeamName(e.target.value)}
-                  className="w-full border rounded px-3 py-2"
-                  required
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Takım Adı</label>
+                  <input
+                    type="text"
+                    value={editTeamName}
+                    onChange={(e) => setEditTeamName(e.target.value)}
+                    className="w-full border rounded px-3 py-2"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Kategori</label>
+                  <select
+                    value={editTeamCategory}
+                    onChange={(e) => setEditTeamCategory(e.target.value as TeamCategory)}
+                    className="w-full border rounded px-3 py-2"
+                  >
+                    <option value={TeamCategory.MALE}>Erkek</option>
+                    <option value={TeamCategory.FEMALE}>Kadın</option>
+                    <option value={TeamCategory.MIXED}>Mix</option>
+                  </select>
+                </div>
               </div>
+              
               <div>
-                <label className="block text-sm font-medium mb-2">Kategori</label>
-                <select
-                  value={editTeamCategory}
-                  onChange={(e) => setEditTeamCategory(e.target.value as TeamCategory)}
-                  className="w-full border rounded px-3 py-2"
-                >
-                  <option value={TeamCategory.MALE}>Erkek</option>
-                  <option value={TeamCategory.FEMALE}>Kadın</option>
-                  <option value={TeamCategory.MIXED}>Mix</option>
-                </select>
+                <label className="block text-sm font-medium mb-2">Takım Üyeleri</label>
+                <div className="space-y-2 mb-4">
+                  {editingTeam.players && editingTeam.players.length > 0 ? (
+                    editingTeam.players.map(({ player }: any) => (
+                      <div
+                        key={player.id}
+                        className="flex items-center justify-between p-2 bg-gray-50 rounded"
+                      >
+                        <span>
+                          {player.name} - {player.level} ({player.gender === "MALE" ? "E" : "K"})
+                        </span>
+                        {editingTeam.captain.id !== player.id && (
+                          <button
+                            onClick={() => handleRemovePlayer(editingTeam.id, player.id)}
+                            className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600"
+                          >
+                            Çıkar
+                          </button>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-gray-500">Henüz üye yok</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Oyuncu Ekle</label>
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        handleAddPlayerDirectly(editingTeam.id, e.target.value)
+                        e.target.value = ""
+                      }
+                    }}
+                    className="w-full border rounded px-3 py-2"
+                  >
+                    <option value="">Oyuncu Seç</option>
+                    {players
+                      .filter((player) => {
+                        // Filter players based on team category
+                        if (editTeamCategory === TeamCategory.MALE && player.gender !== "MALE") {
+                          return false
+                        }
+                        if (editTeamCategory === TeamCategory.FEMALE && player.gender !== "FEMALE") {
+                          return false
+                        }
+                        // Check if player is already in team
+                        return !editingTeam.players.some((tp: any) => tp.player.id === player.id)
+                      })
+                      .map((player) => (
+                        <option key={player.id} value={player.id}>
+                          {player.name} ({player.level})
+                        </option>
+                      ))}
+                  </select>
+                </div>
               </div>
+              
               <div className="flex gap-2">
                 <button
                   onClick={handleSaveTeam}
@@ -368,53 +632,106 @@ export default function CaptainDashboard() {
 
               <div>
                 <h3 className="font-semibold mb-2">Oyuncu Davet Et</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {players
-                    .filter((player) => {
-                      // Filter players based on team category
-                      if (team.category === TeamCategory.MALE && player.gender !== "MALE") {
-                        return false
-                      }
-                      if (team.category === TeamCategory.FEMALE && player.gender !== "FEMALE") {
-                        return false
-                      }
-                      // Check if player is already in team
-                      return !team.players.some((tp) => tp.player.id === player.id)
-                    })
-                    .map((player) => {
-                      const isInvited = isPlayerInvited(team.id, player.id)
-                      return (
-                        <div
-                          key={player.id}
-                          className="flex items-center justify-between p-2 bg-gray-50 rounded"
+                <div className="relative dropdown-container">
+                  <div className="flex gap-2 mb-2">
+                    <div className="flex-1 relative">
+                      <input
+                        type="text"
+                        placeholder="Oyuncu ara..."
+                        value={searchQuery[team.id] || ""}
+                        onChange={(e) => {
+                          setSearchQuery(prev => ({ ...prev, [team.id]: e.target.value }))
+                          setDropdownOpen(prev => ({ ...prev, [team.id]: true }))
+                        }}
+                        onFocus={() => setDropdownOpen(prev => ({ ...prev, [team.id]: true }))}
+                        className="w-full border rounded px-3 py-2 pr-10"
+                      />
+                      {searchQuery[team.id] && (
+                        <button
+                          onClick={() => {
+                            setSearchQuery(prev => ({ ...prev, [team.id]: "" }))
+                            setDropdownOpen(prev => ({ ...prev, [team.id]: false }))
+                          }}
+                          className="absolute right-2 top-2 text-gray-400 hover:text-gray-600"
                         >
-                          <span className="text-sm">
-                            {player.name} ({player.level})
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleInviteSelectedPlayers(team.id)}
+                      disabled={(selectedPlayersForInvite[team.id] || []).length === 0}
+                      className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Davet Et ({(selectedPlayersForInvite[team.id] || []).length})
+                    </button>
+                  </div>
+
+                  {/* Selected players chips */}
+                  {(selectedPlayersForInvite[team.id] || []).length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {selectedPlayersForInvite[team.id].map((playerId) => {
+                        const player = players.find(p => p.id === playerId)
+                        if (!player) return null
+                        return (
+                          <span
+                            key={playerId}
+                            className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm"
+                          >
+                            {player.name}
+                            <button
+                              onClick={() => togglePlayerSelection(team.id, playerId)}
+                              className="text-blue-600 hover:text-blue-800"
+                            >
+                              ✕
+                            </button>
                           </span>
-                          <div className="flex gap-1">
-                            {editingTeam?.id === team.id ? (
-                              <button
-                                onClick={() => handleAddPlayerDirectly(team.id, player.id)}
-                                className="px-2 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600"
-                              >
-                                Ekle
-                              </button>
-                            ) : isInvited ? (
-                              <span className="px-2 py-1 bg-green-100 text-green-700 text-xs rounded font-medium">
-                                Davet Edildi
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {/* Dropdown */}
+                  {dropdownOpen[team.id] && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-60 overflow-y-auto">
+                      {getAvailablePlayers(team).length === 0 ? (
+                        <div className="p-3 text-gray-500 text-sm">Oyuncu bulunamadı</div>
+                      ) : (
+                        getAvailablePlayers(team).map((player) => {
+                          const isSelected = (selectedPlayersForInvite[team.id] || []).includes(player.id)
+                          const isInvited = isPlayerInvited(team.id, player.id)
+                          return (
+                            <div
+                              key={player.id}
+                              onClick={() => {
+                                if (!isInvited) {
+                                  togglePlayerSelection(team.id, player.id)
+                                }
+                              }}
+                              className={`p-2 hover:bg-gray-100 cursor-pointer flex items-center justify-between ${
+                                isSelected ? "bg-blue-50" : ""
+                              } ${isInvited ? "opacity-50 cursor-not-allowed" : ""}`}
+                            >
+                              <span className="text-sm">
+                                {player.name} ({player.level})
                               </span>
-                            ) : (
-                              <button
-                                onClick={() => handleInvitePlayer(team.id, player.id)}
-                                className="px-2 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
-                              >
-                                Davet Et
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })}
+                              {isInvited ? (
+                                <span className="text-xs text-green-600 font-medium">Davet Edildi</span>
+                              ) : (
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => {}}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="ml-2"
+                                />
+                              )}
+                            </div>
+                          )
+                        })
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

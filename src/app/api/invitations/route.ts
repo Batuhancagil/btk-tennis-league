@@ -103,10 +103,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { teamId, playerId } = await req.json()
+    const { teamId, playerId, playerIds } = await req.json()
 
-    if (!teamId || !playerId) {
-      return NextResponse.json({ error: "Missing teamId or playerId" }, { status: 400 })
+    if (!teamId) {
+      return NextResponse.json({ error: "Missing teamId" }, { status: 400 })
+    }
+
+    // Support both single playerId and array of playerIds
+    const playerIdsToInvite = playerIds && Array.isArray(playerIds) ? playerIds : playerId ? [playerId] : []
+    
+    if (playerIdsToInvite.length === 0) {
+      return NextResponse.json({ error: "Missing playerId or playerIds" }, { status: 400 })
     }
 
     // Check if user is captain of the team
@@ -121,71 +128,94 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
     }
 
-    // Check if player exists and get their gender
-    const player = await prisma.user.findUnique({
-      where: { id: playerId },
-      select: { gender: true },
-    })
+    const created = []
+    const errors = []
 
-    if (!player) {
-      return NextResponse.json({ error: "Player not found" }, { status: 404 })
-    }
+    for (const pid of playerIdsToInvite) {
+      try {
+        // Check if player exists and get their gender
+        const player = await prisma.user.findUnique({
+          where: { id: pid },
+          select: { gender: true },
+        })
 
-    // Validate gender compatibility
-    if (team.category === "MALE" && player.gender !== "MALE") {
-      return NextResponse.json(
-        { error: "Erkek takımına sadece erkek oyuncular davet edilebilir" },
-        { status: 400 }
-      )
-    }
+        if (!player) {
+          errors.push(`Oyuncu bulunamadı: ${pid}`)
+          continue
+        }
 
-    if (team.category === "FEMALE" && player.gender !== "FEMALE") {
-      return NextResponse.json(
-        { error: "Kadın takımına sadece kadın oyuncular davet edilebilir" },
-        { status: 400 }
-      )
-    }
+        // Validate gender compatibility
+        if (team.category === "MALE" && player.gender !== "MALE") {
+          errors.push(`Erkek takımına sadece erkek oyuncular davet edilebilir: ${pid}`)
+          continue
+        }
 
-    // Check if invitation already exists
-    const existingInvitation = await prisma.invitation.findUnique({
-      where: {
-        teamId_playerId: {
-          teamId,
-          playerId,
-        },
-      },
-    })
+        if (team.category === "FEMALE" && player.gender !== "FEMALE") {
+          errors.push(`Kadın takımına sadece kadın oyuncular davet edilebilir: ${pid}`)
+          continue
+        }
 
-    if (existingInvitation) {
-      return NextResponse.json({ error: "Invitation already exists" }, { status: 400 })
-    }
-
-    const invitation = await prisma.invitation.create({
-      data: {
-        teamId,
-        playerId,
-        invitedBy: session.user.id,
-      },
-      include: {
-        player: {
-          select: {
-            id: true,
-            name: true,
-            gender: true,
-            level: true,
+        // Check if invitation already exists
+        const existingInvitation = await prisma.invitation.findUnique({
+          where: {
+            teamId_playerId: {
+              teamId,
+              playerId: pid,
+            },
           },
-        },
-        team: {
-          select: {
-            id: true,
-            name: true,
-            category: true,
-          },
-        },
-      },
-    })
+        })
 
-    return NextResponse.json(invitation)
+        if (existingInvitation) {
+          errors.push(`Davet zaten mevcut: ${pid}`)
+          continue
+        }
+
+        const invitation = await prisma.invitation.create({
+          data: {
+            teamId,
+            playerId: pid,
+            invitedBy: session.user.id,
+          },
+          include: {
+            player: {
+              select: {
+                id: true,
+                name: true,
+                gender: true,
+                level: true,
+              },
+            },
+            team: {
+              select: {
+                id: true,
+                name: true,
+                category: true,
+              },
+            },
+          },
+        })
+
+        created.push(invitation)
+      } catch (error: any) {
+        if (error.code === "P2002") {
+          errors.push(`Davet zaten mevcut: ${pid}`)
+        } else {
+          errors.push(`Hata: ${pid} - ${error.message || "Bilinmeyen hata"}`)
+        }
+      }
+    }
+
+    // If single invitation, return single object for backward compatibility
+    if (playerIdsToInvite.length === 1 && created.length === 1) {
+      return NextResponse.json(created[0])
+    }
+
+    // For batch, return summary
+    return NextResponse.json({
+      created: created.length,
+      errors: errors.length > 0 ? errors : undefined,
+      invitations: created,
+    })
   } catch (error: any) {
     console.error("Error creating invitation:", error)
     if (error.code === "P2002") {
