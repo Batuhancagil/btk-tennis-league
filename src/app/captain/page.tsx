@@ -46,6 +46,7 @@ export default function CaptainDashboard() {
   const [editTeamMaxPlayers, setEditTeamMaxPlayers] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [selectedTeams, setSelectedTeams] = useState<Set<string>>(new Set())
   const [showExcelUpload, setShowExcelUpload] = useState(false)
   const [uploadingExcel, setUploadingExcel] = useState(false)
   const [selectedPlayersForInvite, setSelectedPlayersForInvite] = useState<{ [teamId: string]: string[] }>({})
@@ -268,6 +269,11 @@ export default function CaptainDashboard() {
 
       if (res.ok) {
         await fetchTeams()
+        setSelectedTeams((prev) => {
+          const newSet = new Set(prev)
+          newSet.delete(teamId)
+          return newSet
+        })
         if (editingTeam?.id === teamId) {
           setEditingTeam(null)
         }
@@ -278,6 +284,63 @@ export default function CaptainDashboard() {
     } catch (error) {
       console.error("Error deleting team:", error)
       alert("Takım silinirken hata oluştu")
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const handleSelectTeam = (teamId: string) => {
+    setSelectedTeams((prev) => {
+      const newSet = new Set(prev)
+      if (newSet.has(teamId)) {
+        newSet.delete(teamId)
+      } else {
+        newSet.add(teamId)
+      }
+      return newSet
+    })
+  }
+
+  const handleSelectAll = () => {
+    if (selectedTeams.size === teams.length) {
+      setSelectedTeams(new Set())
+    } else {
+      setSelectedTeams(new Set(teams.map((t) => t.id)))
+    }
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedTeams.size === 0) return
+
+    const count = selectedTeams.size
+    if (!confirm(`${count} takımı silmek istediğinize emin misiniz?`)) return
+
+    setDeleting(true)
+    try {
+      const res = await fetch("/api/teams", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teamIds: Array.from(selectedTeams) }),
+      })
+
+      if (res.ok) {
+        const result = await res.json()
+        await fetchTeams()
+        setSelectedTeams(new Set())
+        
+        if (result.failed && result.failed.length > 0) {
+          const failedMessages = result.failed.map((f: any) => `${f.teamId}: ${f.reason}`).join("\n")
+          alert(`Bazı takımlar silinemedi:\n${failedMessages}`)
+        } else {
+          alert(`${result.successful.length} takım başarıyla silindi`)
+        }
+      } else {
+        const error = await res.json()
+        alert(error.error || "Takımlar silinirken hata oluştu")
+      }
+    } catch (error) {
+      console.error("Error bulk deleting teams:", error)
+      alert("Takımlar silinirken hata oluştu")
     } finally {
       setDeleting(false)
     }
@@ -639,20 +702,49 @@ export default function CaptainDashboard() {
           </div>
         )}
 
+        {teams.length > 0 && (
+          <div className="mb-4 flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={selectedTeams.size === teams.length && teams.length > 0}
+              onChange={handleSelectAll}
+              className="w-4 h-4"
+            />
+            <label className="text-sm text-gray-700">Tümünü Seç</label>
+            {selectedTeams.size > 0 && (
+              <button
+                onClick={handleBulkDelete}
+                disabled={deleting}
+                className="ml-4 px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50"
+              >
+                {deleting ? "Siliniyor..." : `Seçilenleri Sil (${selectedTeams.size})`}
+              </button>
+            )}
+          </div>
+        )}
+
         <div className="space-y-6">
           {teams.map((team) => (
             <div key={team.id} className="bg-white rounded-lg shadow p-6">
               <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h2 className="text-2xl font-semibold">{team.name}</h2>
-                  <p className="text-gray-600">
-                    {team.category === TeamCategory.MALE
-                      ? "Erkek"
-                      : team.category === TeamCategory.FEMALE
-                      ? "Kadın"
-                      : "Mix"}{" "}
-                    Takımı
-                  </p>
+                <div className="flex items-center gap-2 flex-1">
+                  <input
+                    type="checkbox"
+                    checked={selectedTeams.has(team.id)}
+                    onChange={() => handleSelectTeam(team.id)}
+                    className="w-4 h-4"
+                  />
+                  <div>
+                    <h2 className="text-2xl font-semibold">{team.name}</h2>
+                    <p className="text-gray-600">
+                      {team.category === TeamCategory.MALE
+                        ? "Erkek"
+                        : team.category === TeamCategory.FEMALE
+                        ? "Kadın"
+                        : "Mix"}{" "}
+                      Takımı
+                    </p>
+                  </div>
                 </div>
                 <div className="flex gap-2">
                   <button

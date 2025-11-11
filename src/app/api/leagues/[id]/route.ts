@@ -128,3 +128,56 @@ export async function PATCH(
   }
 }
 
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const session = await getServerSession(authOptions)
+
+    if (!session?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Only managers and superadmins can delete leagues
+    if (session.user.role !== UserRole.MANAGER && session.user.role !== UserRole.SUPERADMIN) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
+    }
+
+    const league = await prisma.league.findUnique({
+      where: { id: params.id },
+    })
+
+    if (!league) {
+      return NextResponse.json({ error: "League not found" }, { status: 404 })
+    }
+
+    // Check if user is manager of this league
+    if (league.managerId !== session.user.id && session.user.role !== UserRole.SUPERADMIN) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
+    }
+
+    // Check if league has matches
+    const matchesCount = await prisma.match.count({
+      where: { leagueId: params.id },
+    })
+
+    if (matchesCount > 0) {
+      return NextResponse.json(
+        { error: "Bu ligin maçları bulunmaktadır. Maçları olan ligler silinemez." },
+        { status: 400 }
+      )
+    }
+
+    // Delete the league (cascade will handle teams, leaguePlayers, etc.)
+    await prisma.league.delete({
+      where: { id: params.id },
+    })
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error("Error deleting league:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}
+
