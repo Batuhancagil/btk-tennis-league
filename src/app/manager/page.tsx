@@ -23,6 +23,7 @@ interface League {
   }>
   _count: {
     matches: number
+    leaguePlayers: number
   }
 }
 
@@ -731,14 +732,16 @@ export default function ManagerDashboard() {
                       ))
                   )}
                 </select>
-                {league.teams.length >= 2 && league._count.matches === 0 && (
-                  <button
-                    onClick={() => handleGenerateFixtures(league.id)}
-                    className="px-6 py-2 bg-tennis-green text-white rounded-xl hover:bg-tennis-green/90 transition-colors font-semibold whitespace-nowrap"
-                  >
-                    Fikstür Oluştur
-                  </button>
-                )}
+                {((league.format === LeagueFormat.DOUBLES && league.teams.length >= 2) ||
+                  (league.format === LeagueFormat.INDIVIDUAL && league._count.leaguePlayers >= 2)) &&
+                  league._count.matches === 0 && (
+                    <button
+                      onClick={() => handleGenerateFixtures(league.id)}
+                      className="px-6 py-2 bg-tennis-green text-white rounded-xl hover:bg-tennis-green/90 transition-colors font-semibold whitespace-nowrap"
+                    >
+                      Fikstür Oluştur
+                    </button>
+                  )}
               </div>
             </div>
           ))}

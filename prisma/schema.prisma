@@ -78,29 +78,31 @@ enum LeagueFormat {
 }
 
 model User {
-  id            String      @id @default(cuid())
-  email         String      @unique
+  id            String       @id @default(cuid())
+  email         String       @unique
   name          String
-  password      String?     // Optional for OAuth users
+  password      String? // Optional for OAuth users
   gender        Gender?
   level         PlayerLevel?
-  status        UserStatus  @default(PENDING)
-  role          UserRole    @default(PLAYER)
+  status        UserStatus   @default(PENDING)
+  role          UserRole     @default(PLAYER)
   emailVerified DateTime?
   image         String?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 
   // Relations
   accounts        Account[]
   sessions        Session[]
   teams           TeamPlayer[]
-  captainTeams    Team[]       @relation("TeamCaptain")
-  managerLeagues  League[]     @relation("LeagueManager")
+  captainTeams    Team[]         @relation("TeamCaptain")
+  managerLeagues  League[]       @relation("LeagueManager")
   invitations     Invitation[]
   matchSquads     MatchSquad[]
-  approvedMatches Match[]      @relation("MatchApprover")
+  approvedMatches Match[]        @relation("MatchApprover")
   leaguePlayers   LeaguePlayer[]
+  homeMatches     Match[]        @relation("HomePlayer")
+  awayMatches     Match[]        @relation("AwayPlayer")
 
   @@map("users")
 }
@@ -179,9 +181,9 @@ model League {
   updatedAt DateTime     @updatedAt
 
   // Relations
-  manager      User          @relation("LeagueManager", fields: [managerId], references: [id])
-  teams        Team[]
-  matches      Match[]
+  manager       User           @relation("LeagueManager", fields: [managerId], references: [id])
+  teams         Team[]
+  matches       Match[]
   leaguePlayers LeaguePlayer[]
 
   @@map("leagues")
@@ -190,8 +192,10 @@ model League {
 model Match {
   id            String       @id @default(cuid())
   leagueId      String
-  homeTeamId    String
-  awayTeamId    String
+  homeTeamId    String?
+  awayTeamId    String?
+  homePlayerId  String?
+  awayPlayerId  String?
   category      TeamCategory
   matchType     MatchType
   scheduledDate DateTime?
@@ -205,8 +209,10 @@ model Match {
 
   // Relations
   league     League       @relation(fields: [leagueId], references: [id])
-  homeTeam   Team         @relation("HomeTeam", fields: [homeTeamId], references: [id])
-  awayTeam   Team         @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  homeTeam   Team?        @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam   Team?        @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  homePlayer User?        @relation("HomePlayer", fields: [homePlayerId], references: [id])
+  awayPlayer User?        @relation("AwayPlayer", fields: [awayPlayerId], references: [id])
   approvedBy User?        @relation("MatchApprover", fields: [approvedById], references: [id])
   squads     MatchSquad[]
 

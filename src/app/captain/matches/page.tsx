@@ -11,15 +11,16 @@ interface Match {
   league: {
     id: string
     name: string
+    format?: string
   }
   homeTeam: {
     id: string
     name: string
-  }
+  } | null
   awayTeam: {
     id: string
     name: string
-  }
+  } | null
   category: string
   matchType: MatchType
   scheduledDate: string | null
@@ -62,8 +63,12 @@ export default function CaptainMatchesPage() {
     try {
       const res = await fetch("/api/matches")
       const data = await res.json()
-      // Filter matches where user is captain of one of the teams
+      // Filter matches where user is captain of one of the teams (only team-based matches)
       const myMatches = data.filter((match: Match) => {
+        // Skip individual league matches (captains don't manage individual leagues)
+        if (match.league.format === "INDIVIDUAL") return false
+        if (!match.homeTeam || !match.awayTeam) return false
+        
         const myTeamIds = teams.map((t) => t.id)
         return myTeamIds.includes(match.homeTeam.id) || myTeamIds.includes(match.awayTeam.id)
       })

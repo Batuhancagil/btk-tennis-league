@@ -15,12 +15,20 @@ export async function GET(req: NextRequest) {
     const searchParams = req.nextUrl.searchParams
     const leagueId = searchParams.get("leagueId")
     const teamId = searchParams.get("teamId")
+    const playerId = searchParams.get("playerId")
     const status = searchParams.get("status")
 
     const where: any = {}
     if (leagueId) where.leagueId = leagueId
     if (teamId) {
       where.OR = [{ homeTeamId: teamId }, { awayTeamId: teamId }]
+    }
+    if (playerId) {
+      where.OR = [
+        { homePlayerId: playerId },
+        { awayPlayerId: playerId },
+        ...(where.OR || []),
+      ]
     }
     if (status) where.status = status
 
@@ -31,6 +39,7 @@ export async function GET(req: NextRequest) {
           select: {
             id: true,
             name: true,
+            format: true,
           },
         },
         homeTeam: {
@@ -40,6 +49,18 @@ export async function GET(req: NextRequest) {
           },
         },
         awayTeam: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        homePlayer: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        awayPlayer: {
           select: {
             id: true,
             name: true,
@@ -85,10 +106,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
     }
 
-    const { leagueId, homeTeamId, awayTeamId, category, matchType, scheduledDate } = await req.json()
+    const {
+      leagueId,
+      homeTeamId,
+      awayTeamId,
+      homePlayerId,
+      awayPlayerId,
+      category,
+      matchType,
+      scheduledDate,
+    } = await req.json()
 
-    if (!leagueId || !homeTeamId || !awayTeamId || !category || !matchType) {
+    if (!leagueId || !category || !matchType) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    }
+
+    // Validate that either teams or players are provided
+    if ((!homeTeamId || !awayTeamId) && (!homePlayerId || !awayPlayerId)) {
+      return NextResponse.json(
+        { error: "Either teams or players must be provided" },
+        { status: 400 }
+      )
+    }
+
+    // Validate that not both teams and players are provided
+    if ((homeTeamId || awayTeamId) && (homePlayerId || awayPlayerId)) {
+      return NextResponse.json(
+        { error: "Cannot provide both teams and players" },
+        { status: 400 }
+      )
     }
 
     if (!Object.values(MatchType).includes(matchType)) {
@@ -98,8 +144,10 @@ export async function POST(req: NextRequest) {
     const match = await prisma.match.create({
       data: {
         leagueId,
-        homeTeamId,
-        awayTeamId,
+        homeTeamId: homeTeamId || null,
+        awayTeamId: awayTeamId || null,
+        homePlayerId: homePlayerId || null,
+        awayPlayerId: awayPlayerId || null,
         category: category as TeamCategory,
         matchType: matchType as MatchType,
         scheduledDate: scheduledDate ? new Date(scheduledDate) : null,
@@ -109,6 +157,18 @@ export async function POST(req: NextRequest) {
         league: true,
         homeTeam: true,
         awayTeam: true,
+        homePlayer: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        awayPlayer: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
     })
 

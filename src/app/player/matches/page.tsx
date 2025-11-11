@@ -4,22 +4,31 @@ import { useSession } from "next-auth/react"
 import { useEffect, useState, useCallback } from "react"
 import Navbar from "@/components/Navbar"
 import Link from "next/link"
-import { MatchStatus, MatchType } from "@prisma/client"
+import { MatchStatus, MatchType, LeagueFormat } from "@prisma/client"
 
 interface Match {
   id: string
   league: {
     id: string
     name: string
+    format?: LeagueFormat
   }
   homeTeam: {
     id: string
     name: string
-  }
+  } | null
   awayTeam: {
     id: string
     name: string
-  }
+  } | null
+  homePlayer: {
+    id: string
+    name: string
+  } | null
+  awayPlayer: {
+    id: string
+    name: string
+  } | null
   matchType: MatchType
   scheduledDate: string | null
   status: MatchStatus
@@ -47,12 +56,17 @@ export default function PlayerMatchesPage() {
 
   const fetchMatches = useCallback(async () => {
     try {
-      const res = await fetch("/api/matches")
+      const res = await fetch(`/api/matches?playerId=${session?.user.id}`)
       const data = await res.json()
-      // Filter matches where player participated
-      const playerMatches = data.filter((match: Match) =>
-        match.squads.some((squad) => squad.player.id === session?.user.id)
-      )
+      // Filter matches where player participated (either in team squads or as individual player)
+      const playerMatches = data.filter((match: Match) => {
+        // Individual league matches
+        if (match.league.format === LeagueFormat.INDIVIDUAL) {
+          return match.homePlayer?.id === session?.user.id || match.awayPlayer?.id === session?.user.id
+        }
+        // Team-based matches
+        return match.squads.some((squad) => squad.player.id === session?.user.id)
+      })
       setMatches(playerMatches)
     } catch (error) {
       console.error("Error fetching matches:", error)
@@ -71,12 +85,31 @@ export default function PlayerMatchesPage() {
     let draws = 0
 
     playedMatches.forEach((match) => {
-      const playerSquad = match.squads.find((s) => s.player.id === session?.user.id)
-      if (!playerSquad) return
+      let playerScore: number | null = null
+      let opponentScore: number | null = null
 
-      const isHomeTeam = playerSquad.teamId === match.homeTeam.id
-      const playerScore = isHomeTeam ? match.homeScore! : match.awayScore!
-      const opponentScore = isHomeTeam ? match.awayScore! : match.homeScore!
+      if (match.league.format === LeagueFormat.INDIVIDUAL) {
+        // Individual league match
+        if (match.homePlayer?.id === session?.user.id) {
+          playerScore = match.homeScore!
+          opponentScore = match.awayScore!
+        } else if (match.awayPlayer?.id === session?.user.id) {
+          playerScore = match.awayScore!
+          opponentScore = match.homeScore!
+        } else {
+          return
+        }
+      } else {
+        // Team-based match
+        const playerSquad = match.squads.find((s) => s.player.id === session?.user.id)
+        if (!playerSquad || !match.homeTeam || !match.awayTeam) return
+
+        const isHomeTeam = playerSquad.teamId === match.homeTeam.id
+        playerScore = isHomeTeam ? match.homeScore! : match.awayScore!
+        opponentScore = isHomeTeam ? match.awayScore! : match.homeScore!
+      }
+
+      if (playerScore === null || opponentScore === null) return
 
       if (playerScore > opponentScore) {
         wins++
@@ -151,12 +184,31 @@ export default function PlayerMatchesPage() {
 
         <div className="space-y-4">
           {matches.map((match) => {
-            const playerSquad = match.squads.find((s) => s.player.id === session?.user.id)
-            if (!playerSquad) return null
+            const isIndividual = match.league.format === LeagueFormat.INDIVIDUAL
+            let isHome: boolean
+            let playerName: string
+            let opponentName: string
 
-            const isHomeTeam = playerSquad.teamId === match.homeTeam.id
-            const myTeam = isHomeTeam ? match.homeTeam : match.awayTeam
-            const opponentTeam = isHomeTeam ? match.awayTeam : match.homeTeam
+            if (isIndividual) {
+              if (match.homePlayer?.id === session?.user.id) {
+                isHome = true
+                playerName = match.homePlayer.name
+                opponentName = match.awayPlayer?.name || "Bilinmeyen"
+              } else if (match.awayPlayer?.id === session?.user.id) {
+                isHome = false
+                playerName = match.awayPlayer.name
+                opponentName = match.homePlayer?.name || "Bilinmeyen"
+              } else {
+                return null
+              }
+            } else {
+              const playerSquad = match.squads.find((s) => s.player.id === session?.user.id)
+              if (!playerSquad || !match.homeTeam || !match.awayTeam) return null
+
+              isHome = playerSquad.teamId === match.homeTeam.id
+              playerName = isHome ? match.homeTeam.name : match.awayTeam.name
+              opponentName = isHome ? match.awayTeam.name : match.homeTeam.name
+            }
 
             return (
               <div key={match.id} className="bg-white rounded-lg shadow p-6">
@@ -164,7 +216,8 @@ export default function PlayerMatchesPage() {
                   <div>
                     <h2 className="text-xl font-semibold">{match.league.name}</h2>
                     <p className="text-gray-600">
-                      {match.homeTeam.name} vs {match.awayTeam.name}
+                      {match.homePlayer?.name || match.homeTeam?.name || "Bilinmeyen"} vs{" "}
+                      {match.awayPlayer?.name || match.awayTeam?.name || "Bilinmeyen"}
                     </p>
                     <p className="text-sm text-gray-500">
                       {match.matchType === MatchType.SINGLE ? "Single" : "Double"} -{" "}
@@ -196,9 +249,10 @@ export default function PlayerMatchesPage() {
                       Skor: {match.homeScore} - {match.awayScore}
                     </p>
                     <p className="text-sm text-gray-600">
-                      Takımınız ({myTeam.name}): {isHomeTeam ? match.homeScore : match.awayScore}
+                      {isIndividual ? "Sizin skorunuz" : `Takımınız (${playerName})`}:{" "}
+                      {isHome ? match.homeScore : match.awayScore}
                     </p>
-                    {isHomeTeam ? (
+                    {isHome ? (
                       match.homeScore > match.awayScore ? (
                         <p className="text-green-600 font-medium">✓ Galibiyet</p>
                       ) : match.homeScore < match.awayScore ? (

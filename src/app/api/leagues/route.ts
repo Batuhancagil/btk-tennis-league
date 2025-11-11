@@ -51,6 +51,7 @@ export async function GET(req: NextRequest) {
         _count: {
           select: {
             matches: true,
+            leaguePlayers: true,
           },
         },
       },

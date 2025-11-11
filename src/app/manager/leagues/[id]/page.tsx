@@ -12,11 +12,19 @@ interface Match {
   homeTeam: {
     id: string
     name: string
-  }
+  } | null
   awayTeam: {
     id: string
     name: string
-  }
+  } | null
+  homePlayer: {
+    id: string
+    name: string
+  } | null
+  awayPlayer: {
+    id: string
+    name: string
+  } | null
   matchType: MatchType
   scheduledDate: string | null
   status: MatchStatus
@@ -26,6 +34,9 @@ interface Match {
     id: string
     name: string
   } | null
+  league?: {
+    format: LeagueFormat
+  }
 }
 
 interface LeagueTableEntry {
@@ -92,7 +103,7 @@ export default function LeagueDetailPage() {
 
   const fetchMatches = useCallback(async () => {
     try {
-      const statusParam = filter === "ALL" ? "" : `?status=${filter}`
+      const statusParam = filter === "ALL" ? "" : `&status=${filter}`
       const res = await fetch(`/api/matches?leagueId=${leagueId}${statusParam}`)
       const data = await res.json()
       setMatches(data)
@@ -103,6 +114,12 @@ export default function LeagueDetailPage() {
 
   const calculateTable = useCallback(() => {
     if (!league) return
+
+    // Only calculate table for doubles leagues (team-based)
+    if (league.format === LeagueFormat.INDIVIDUAL) {
+      setTable([])
+      return
+    }
 
     const tableMap = new Map<string, LeagueTableEntry>()
 
@@ -124,10 +141,12 @@ export default function LeagueDetailPage() {
 
     // Calculate stats from played matches
     matches
-      .filter((m) => m.status === MatchStatus.PLAYED && m.homeScore !== null && m.awayScore !== null)
+      .filter((m) => m.status === MatchStatus.PLAYED && m.homeScore !== null && m.awayScore !== null && m.homeTeam && m.awayTeam)
       .forEach((match) => {
-        const homeEntry = tableMap.get(match.homeTeam.id)!
-        const awayEntry = tableMap.get(match.awayTeam.id)!
+        const homeEntry = tableMap.get(match.homeTeam!.id)
+        const awayEntry = tableMap.get(match.awayTeam!.id)
+
+        if (!homeEntry || !awayEntry) return
 
         homeEntry.played++
         awayEntry.played++
@@ -326,7 +345,14 @@ export default function LeagueDetailPage() {
     )
   }
 
-  const pendingMatches = matches.filter((m) => m.status === MatchStatus.SCHEDULED && m.homeScore !== null && m.awayScore !== null)
+  const pendingMatches = matches.filter(
+    (m) =>
+      m.status === MatchStatus.SCHEDULED &&
+      m.homeScore !== null &&
+      m.awayScore !== null &&
+      ((league.format === LeagueFormat.DOUBLES && m.homeTeam && m.awayTeam) ||
+        (league.format === LeagueFormat.INDIVIDUAL && m.homePlayer && m.awayPlayer))
+  )
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -416,26 +442,36 @@ export default function LeagueDetailPage() {
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
             <h2 className="text-lg font-semibold mb-2">Onay Bekleyen Maçlar ({pendingMatches.length})</h2>
             <div className="space-y-2">
-              {pendingMatches.map((match) => (
-                <div key={match.id} className="flex items-center justify-between p-2 bg-white rounded">
-                  <div>
-                    <p className="font-medium">
-                      {match.homeTeam.name} {match.homeScore} - {match.awayScore} {match.awayTeam.name}
-                    </p>
-                    <p className="text-sm text-gray-500">
-                      {match.scheduledDate
-                        ? new Date(match.scheduledDate).toLocaleDateString("tr-TR")
-                        : "Tarih belirlenmedi"}
-                    </p>
+              {pendingMatches.map((match) => {
+                const isIndividual = league.format === LeagueFormat.INDIVIDUAL
+                const homeName = isIndividual
+                  ? match.homePlayer?.name || "Bilinmeyen"
+                  : match.homeTeam?.name || "Bilinmeyen"
+                const awayName = isIndividual
+                  ? match.awayPlayer?.name || "Bilinmeyen"
+                  : match.awayTeam?.name || "Bilinmeyen"
+
+                return (
+                  <div key={match.id} className="flex items-center justify-between p-2 bg-white rounded">
+                    <div>
+                      <p className="font-medium">
+                        {homeName} {match.homeScore} - {match.awayScore} {awayName}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {match.scheduledDate
+                          ? new Date(match.scheduledDate).toLocaleDateString("tr-TR")
+                          : "Tarih belirlenmedi"}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleApproveMatch(match.id)}
+                      className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+                    >
+                      Onayla
+                    </button>
                   </div>
-                  <button
-                    onClick={() => handleApproveMatch(match.id)}
-                    className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
-                  >
-                    Onayla
-                  </button>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         )}
@@ -634,50 +670,60 @@ export default function LeagueDetailPage() {
             <div>
               <h2 className="text-2xl font-semibold mb-4">Maçlar</h2>
               <div className="space-y-2">
-                {matches.map((match) => (
-                  <div key={match.id} className="bg-white rounded-lg shadow p-4">
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="flex-1">
-                        <p className="font-medium">
-                          {match.homeTeam.name} vs {match.awayTeam.name}
-                        </p>
-                        {match.status === MatchStatus.PLAYED && match.homeScore !== null && match.awayScore !== null && (
-                          <p className="text-lg font-semibold">
-                            {match.homeScore} - {match.awayScore}
+                {matches.map((match) => {
+                  const isIndividual = league.format === LeagueFormat.INDIVIDUAL
+                  const homeName = isIndividual
+                    ? match.homePlayer?.name || "Bilinmeyen"
+                    : match.homeTeam?.name || "Bilinmeyen"
+                  const awayName = isIndividual
+                    ? match.awayPlayer?.name || "Bilinmeyen"
+                    : match.awayTeam?.name || "Bilinmeyen"
+
+                  return (
+                    <div key={match.id} className="bg-white rounded-lg shadow p-4">
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex-1">
+                          <p className="font-medium">
+                            {homeName} vs {awayName}
                           </p>
-                        )}
-                        <p className="text-sm text-gray-500">
-                          {match.matchType === MatchType.SINGLE ? "Single" : "Double"}
-                        </p>
-                        {match.scheduledDate && (
+                          {match.status === MatchStatus.PLAYED && match.homeScore !== null && match.awayScore !== null && (
+                            <p className="text-lg font-semibold">
+                              {match.homeScore} - {match.awayScore}
+                            </p>
+                          )}
                           <p className="text-sm text-gray-500">
-                            {new Date(match.scheduledDate).toLocaleDateString("tr-TR")}
+                            {match.matchType === MatchType.SINGLE ? "Single" : "Double"}
                           </p>
-                        )}
-                      </div>
-                      <span
-                        className={`px-2 py-1 rounded text-xs ${
-                          match.status === MatchStatus.PLAYED
-                            ? "bg-green-100 text-green-800"
+                          {match.scheduledDate && (
+                            <p className="text-sm text-gray-500">
+                              {new Date(match.scheduledDate).toLocaleDateString("tr-TR")}
+                            </p>
+                          )}
+                        </div>
+                        <span
+                          className={`px-2 py-1 rounded text-xs ${
+                            match.status === MatchStatus.PLAYED
+                              ? "bg-green-100 text-green-800"
+                              : match.status === MatchStatus.CANCELLED
+                              ? "bg-red-100 text-red-800"
+                              : "bg-yellow-100 text-yellow-800"
+                          }`}
+                        >
+                          {match.status === MatchStatus.PLAYED
+                            ? "Oynandı"
                             : match.status === MatchStatus.CANCELLED
-                            ? "bg-red-100 text-red-800"
-                            : "bg-yellow-100 text-yellow-800"
-                        }`}
-                      >
-                        {match.status === MatchStatus.PLAYED
-                          ? "Oynandı"
-                          : match.status === MatchStatus.CANCELLED
-                          ? "İptal"
-                          : "Planlandı"}
-                      </span>
+                            ? "İptal"
+                            : "Planlandı"}
+                        </span>
+                      </div>
+                      {match.approvedBy && (
+                        <p className="text-xs text-gray-500">
+                          Onaylayan: {match.approvedBy.name}
+                        </p>
+                      )}
                     </div>
-                    {match.approvedBy && (
-                      <p className="text-xs text-gray-500">
-                        Onaylayan: {match.approvedBy.name}
-                      </p>
-                    )}
-                  </div>
-                ))}
+                  )
+                })}
                 {matches.length === 0 && (
                   <div className="bg-white rounded-lg shadow p-4 text-center">
                     <p className="text-gray-500">Henüz maç yok</p>
