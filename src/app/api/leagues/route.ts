@@ -92,9 +92,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Validate format if provided, otherwise default to DOUBLES
-    let leagueFormat = LeagueFormat.DOUBLES
+    let leagueFormat: LeagueFormat = LeagueFormat.DOUBLES
     if (format) {
-      if (!Object.values(LeagueFormat).includes(format)) {
+      if (format !== LeagueFormat.DOUBLES && format !== LeagueFormat.INDIVIDUAL) {
         return NextResponse.json({ error: "Invalid league format" }, { status: 400 })
       }
       leagueFormat = format as LeagueFormat
@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
         season,
         managerId: session.user.id,
         status: LeagueStatus.DRAFT,
-      },
+      } as any, // Type assertion needed until Prisma Client is regenerated with new schema
       include: {
         manager: {
           select: {
