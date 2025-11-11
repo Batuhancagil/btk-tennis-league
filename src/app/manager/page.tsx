@@ -71,6 +71,14 @@ export default function ManagerDashboard() {
   const [selectedLeagues, setSelectedLeagues] = useState<Set<string>>(new Set())
   const [showExcelUpload, setShowExcelUpload] = useState(false)
   const [uploadingExcel, setUploadingExcel] = useState(false)
+  // For team editing dropdown
+  const [selectedPlayersForTeam, setSelectedPlayersForTeam] = useState<string[]>([])
+  const [searchQueryTeam, setSearchQueryTeam] = useState<string>("")
+  const [dropdownOpenTeam, setDropdownOpenTeam] = useState<boolean>(false)
+  // For league player adding dropdown
+  const [selectedPlayersForLeague, setSelectedPlayersForLeague] = useState<{ [leagueId: string]: string[] }>({})
+  const [searchQueryLeague, setSearchQueryLeague] = useState<{ [leagueId: string]: string }>({})
+  const [dropdownOpenLeague, setDropdownOpenLeague] = useState<{ [leagueId: string]: boolean }>({})
 
   useEffect(() => {
     if (session?.user) {
@@ -79,6 +87,23 @@ export default function ManagerDashboard() {
       fetchAllPlayers()
     }
   }, [session])
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement
+      if (!target.closest('.dropdown-container')) {
+        setDropdownOpenTeam(false)
+        Object.keys(dropdownOpenLeague).forEach(leagueId => {
+          if (dropdownOpenLeague[leagueId]) {
+            setDropdownOpenLeague(prev => ({ ...prev, [leagueId]: false }))
+          }
+        })
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [dropdownOpenLeague])
 
   const fetchLeagues = async () => {
     try {
@@ -121,6 +146,10 @@ export default function ManagerDashboard() {
       setEditTeamCategory(data.category)
       setEditTeamMaxPlayers(data.maxPlayers || null)
       setTeamPlayers(data.players || [])
+      // Clear dropdown state when editing a new team
+      setSelectedPlayersForTeam([])
+      setSearchQueryTeam("")
+      setDropdownOpenTeam(false)
     } catch (error) {
       console.error("Error fetching team:", error)
       alert("Takım bilgileri yüklenirken hata oluştu")
@@ -178,6 +207,77 @@ export default function ManagerDashboard() {
       console.error("Error adding player:", error)
       alert("Hata oluştu")
     }
+  }
+
+  const handleAddSelectedPlayersToTeam = async () => {
+    if (!editingTeam || selectedPlayersForTeam.length === 0) {
+      alert("Lütfen en az bir oyuncu seçin")
+      return
+    }
+
+    try {
+      const res = await fetch(`/api/teams/${editingTeam.id}/players`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerIds: selectedPlayersForTeam }),
+      })
+      
+      const data = await res.json()
+      if (res.ok) {
+        let message = `${data.created || selectedPlayersForTeam.length} oyuncu eklendi`
+        if (data.errors && data.errors.length > 0) {
+          message += `\nHatalar: ${data.errors.length}`
+          if (data.errors.length <= 5) {
+            message += `\n${data.errors.join("\n")}`
+          }
+        }
+        alert(message)
+        // Clear selections and search
+        setSelectedPlayersForTeam([])
+        setSearchQueryTeam("")
+        setDropdownOpenTeam(false)
+        handleEditTeam(editingTeam.id) // Refresh team data
+        fetchLeagues()
+      } else {
+        alert(data.error || "Hata oluştu")
+      }
+    } catch (error) {
+      console.error("Error adding players:", error)
+      alert("Hata oluştu")
+    }
+  }
+
+  const togglePlayerSelectionForTeam = (playerId: string) => {
+    setSelectedPlayersForTeam(prev => {
+      if (prev.includes(playerId)) {
+        return prev.filter(id => id !== playerId)
+      } else {
+        return [...prev, playerId]
+      }
+    })
+  }
+
+  const getAvailablePlayersForTeam = () => {
+    if (!editingTeam) return []
+    return allPlayers.filter((player) => {
+      // Filter players based on team category
+      if (editTeamCategory === TeamCategory.MALE && player.gender !== "MALE") {
+        return false
+      }
+      if (editTeamCategory === TeamCategory.FEMALE && player.gender !== "FEMALE") {
+        return false
+      }
+      // Check if player is already in team
+      if (teamPlayers.some((tp: any) => tp.player.id === player.id)) {
+        return false
+      }
+      // Filter by search query
+      const query = searchQueryTeam.toLowerCase()
+      if (query && !player.name.toLowerCase().includes(query)) {
+        return false
+      }
+      return true
+    })
   }
 
   const handleRemovePlayerFromTeam = async (playerId: string) => {
@@ -279,6 +379,74 @@ export default function ManagerDashboard() {
       console.error("Error adding player to league:", error)
       alert("Oyuncu eklenirken hata oluştu")
     }
+  }
+
+  const handleAddSelectedPlayersToLeague = async (leagueId: string) => {
+    const selectedIds = selectedPlayersForLeague[leagueId] || []
+    if (selectedIds.length === 0) {
+      alert("Lütfen en az bir oyuncu seçin")
+      return
+    }
+
+    try {
+      const res = await fetch(`/api/leagues/${leagueId}/players`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerIds: selectedIds }),
+      })
+      
+      const data = await res.json()
+      if (res.ok) {
+        let message = `${data.created || selectedIds.length} oyuncu eklendi`
+        if (data.errors && data.errors.length > 0) {
+          message += `\nHatalar: ${data.errors.length}`
+          if (data.errors.length <= 5) {
+            message += `\n${data.errors.join("\n")}`
+          }
+        }
+        alert(message)
+        // Clear selections and search
+        setSelectedPlayersForLeague(prev => ({ ...prev, [leagueId]: [] }))
+        setSearchQueryLeague(prev => ({ ...prev, [leagueId]: "" }))
+        setDropdownOpenLeague(prev => ({ ...prev, [leagueId]: false }))
+        fetchLeagues()
+      } else {
+        alert(data.error || "Hata oluştu")
+      }
+    } catch (error) {
+      console.error("Error adding players to league:", error)
+      alert("Hata oluştu")
+    }
+  }
+
+  const togglePlayerSelectionForLeague = (leagueId: string, playerId: string) => {
+    setSelectedPlayersForLeague(prev => {
+      const current = prev[leagueId] || []
+      if (current.includes(playerId)) {
+        return { ...prev, [leagueId]: current.filter(id => id !== playerId) }
+      } else {
+        return { ...prev, [leagueId]: [...current, playerId] }
+      }
+    })
+  }
+
+  const getAvailablePlayersForLeague = (league: League) => {
+    return allPlayers.filter((player) => {
+      if (league.category === TeamCategory.MALE && player.gender !== "MALE") {
+        return false
+      }
+      if (league.category === TeamCategory.FEMALE && player.gender !== "FEMALE") {
+        return false
+      }
+      if (league.leaguePlayers?.some((lp: any) => lp.playerId === player.id)) {
+        return false
+      }
+      const query = (searchQueryLeague[league.id] || "").toLowerCase()
+      if (query && !player.name.toLowerCase().includes(query)) {
+        return false
+      }
+      return true
+    })
   }
 
   const handleDeleteLeague = async (leagueId: string) => {
@@ -679,34 +847,98 @@ export default function ManagerDashboard() {
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Oyuncu Ekle</label>
-                  <select
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        handleAddPlayerToTeam(e.target.value)
-                        e.target.value = ""
-                      }
-                    }}
-                    className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-tennis-gold focus:border-tennis-gold transition-all"
-                  >
-                    <option value="">Oyuncu Seç</option>
-                    {allPlayers
-                      .filter((player) => {
-                        // Filter players based on team category
-                        if (editTeamCategory === TeamCategory.MALE && player.gender !== "MALE") {
-                          return false
-                        }
-                        if (editTeamCategory === TeamCategory.FEMALE && player.gender !== "FEMALE") {
-                          return false
-                        }
-                        // Check if player is already in team
-                        return !teamPlayers.some((tp: any) => tp.player.id === player.id)
-                      })
-                      .map((player) => (
-                        <option key={player.id} value={player.id}>
-                          {player.name} ({player.level || "Seviye yok"})
-                        </option>
-                      ))}
-                  </select>
+                  <div className="relative dropdown-container">
+                    <div className="flex gap-2 mb-2">
+                      <div className="flex-1 relative">
+                        <input
+                          type="text"
+                          placeholder="Oyuncu ara..."
+                          value={searchQueryTeam}
+                          onChange={(e) => {
+                            setSearchQueryTeam(e.target.value)
+                            setDropdownOpenTeam(true)
+                          }}
+                          onFocus={() => setDropdownOpenTeam(true)}
+                          className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 pr-10 focus:ring-2 focus:ring-tennis-gold focus:border-tennis-gold transition-all"
+                        />
+                        {searchQueryTeam && (
+                          <button
+                            onClick={() => {
+                              setSearchQueryTeam("")
+                              setDropdownOpenTeam(false)
+                            }}
+                            className="absolute right-2 top-2 text-gray-400 hover:text-gray-600"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                      <button
+                        onClick={handleAddSelectedPlayersToTeam}
+                        disabled={selectedPlayersForTeam.length === 0}
+                        className="px-4 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-all"
+                      >
+                        Ekle ({selectedPlayersForTeam.length})
+                      </button>
+                    </div>
+
+                    {/* Selected players chips */}
+                    {selectedPlayersForTeam.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {selectedPlayersForTeam.map((playerId) => {
+                          const player = allPlayers.find(p => p.id === playerId)
+                          if (!player) return null
+                          return (
+                            <span
+                              key={playerId}
+                              className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm"
+                            >
+                              {player.name}
+                              <button
+                                onClick={() => togglePlayerSelectionForTeam(playerId)}
+                                className="text-blue-600 hover:text-blue-800"
+                              >
+                                ✕
+                              </button>
+                            </span>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {/* Dropdown */}
+                    {dropdownOpenTeam && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border-2 border-gray-200 rounded-xl shadow-lg max-h-60 overflow-y-auto">
+                        {getAvailablePlayersForTeam().length === 0 ? (
+                          <div className="p-3 text-gray-500 text-sm">Oyuncu bulunamadı</div>
+                        ) : (
+                          getAvailablePlayersForTeam().map((player) => {
+                            const isSelected = selectedPlayersForTeam.includes(player.id)
+                            return (
+                              <div
+                                key={player.id}
+                                onClick={() => togglePlayerSelectionForTeam(player.id)}
+                                className={`p-2 hover:bg-gray-100 cursor-pointer flex items-center justify-between ${
+                                  isSelected ? "bg-blue-50" : ""
+                                }`}
+                              >
+                                <span className="text-sm">
+                                  {player.name} ({player.level || "Seviye yok"})
+                                </span>
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => {}}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="ml-2"
+                                />
+                              </div>
+                            )
+                          })
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
               
@@ -965,32 +1197,98 @@ export default function ManagerDashboard() {
                     )}
                   </select>
                 ) : (
-                  <select
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        handleAddPlayerToLeague(league.id, e.target.value)
-                        e.target.value = ""
-                      }
-                    }}
-                    className="flex-1 border-2 border-gray-200 rounded-xl px-4 py-2 focus:ring-2 focus:ring-tennis-gold focus:border-tennis-gold transition-all"
-                  >
-                    <option value="">Oyuncu Ekle</option>
-                    {allPlayers
-                      .filter((player) => {
-                        if (league.category === TeamCategory.MALE && player.gender !== "MALE") {
-                          return false
-                        }
-                        if (league.category === TeamCategory.FEMALE && player.gender !== "FEMALE") {
-                          return false
-                        }
-                        return !league.leaguePlayers?.some((lp: any) => lp.playerId === player.id)
-                      })
-                      .map((player) => (
-                        <option key={player.id} value={player.id}>
-                          {player.name} ({player.level || "Seviye yok"})
-                        </option>
-                      ))}
-                  </select>
+                  <div className="flex-1 relative dropdown-container">
+                    <div className="flex gap-2">
+                      <div className="flex-1 relative">
+                        <input
+                          type="text"
+                          placeholder="Oyuncu ara..."
+                          value={searchQueryLeague[league.id] || ""}
+                          onChange={(e) => {
+                            setSearchQueryLeague(prev => ({ ...prev, [league.id]: e.target.value }))
+                            setDropdownOpenLeague(prev => ({ ...prev, [league.id]: true }))
+                          }}
+                          onFocus={() => setDropdownOpenLeague(prev => ({ ...prev, [league.id]: true }))}
+                          className="w-full border-2 border-gray-200 rounded-xl px-4 py-2 pr-10 focus:ring-2 focus:ring-tennis-gold focus:border-tennis-gold transition-all"
+                        />
+                        {(searchQueryLeague[league.id] || "") && (
+                          <button
+                            onClick={() => {
+                              setSearchQueryLeague(prev => ({ ...prev, [league.id]: "" }))
+                              setDropdownOpenLeague(prev => ({ ...prev, [league.id]: false }))
+                            }}
+                            className="absolute right-2 top-2 text-gray-400 hover:text-gray-600"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => handleAddSelectedPlayersToLeague(league.id)}
+                        disabled={(selectedPlayersForLeague[league.id] || []).length === 0}
+                        className="px-4 py-2 bg-blue-500 text-white rounded-xl hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed font-semibold transition-all whitespace-nowrap"
+                      >
+                        Ekle ({(selectedPlayersForLeague[league.id] || []).length})
+                      </button>
+                    </div>
+
+                    {/* Selected players chips */}
+                    {(selectedPlayersForLeague[league.id] || []).length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {selectedPlayersForLeague[league.id].map((playerId) => {
+                          const player = allPlayers.find(p => p.id === playerId)
+                          if (!player) return null
+                          return (
+                            <span
+                              key={playerId}
+                              className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm"
+                            >
+                              {player.name}
+                              <button
+                                onClick={() => togglePlayerSelectionForLeague(league.id, playerId)}
+                                className="text-blue-600 hover:text-blue-800"
+                              >
+                                ✕
+                              </button>
+                            </span>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {/* Dropdown */}
+                    {dropdownOpenLeague[league.id] && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border-2 border-gray-200 rounded-xl shadow-lg max-h-60 overflow-y-auto">
+                        {getAvailablePlayersForLeague(league).length === 0 ? (
+                          <div className="p-3 text-gray-500 text-sm">Oyuncu bulunamadı</div>
+                        ) : (
+                          getAvailablePlayersForLeague(league).map((player) => {
+                            const isSelected = (selectedPlayersForLeague[league.id] || []).includes(player.id)
+                            return (
+                              <div
+                                key={player.id}
+                                onClick={() => togglePlayerSelectionForLeague(league.id, player.id)}
+                                className={`p-2 hover:bg-gray-100 cursor-pointer flex items-center justify-between ${
+                                  isSelected ? "bg-blue-50" : ""
+                                }`}
+                              >
+                                <span className="text-sm">
+                                  {player.name} ({player.level || "Seviye yok"})
+                                </span>
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => {}}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="ml-2"
+                                />
+                              </div>
+                            )
+                          })
+                        )}
+                      </div>
+                    )}
+                  </div>
                 )}
                 {((league.format === LeagueFormat.DOUBLES && league.teams.length >= 2) ||
                   (league.format === LeagueFormat.INDIVIDUAL && league._count.leaguePlayers >= 2)) &&

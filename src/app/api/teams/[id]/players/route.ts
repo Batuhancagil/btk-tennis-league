@@ -28,103 +28,127 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
     }
 
-    const { playerId } = await req.json()
+    const { playerId, playerIds } = await req.json()
 
-    if (!playerId) {
-      return NextResponse.json({ error: "Missing playerId" }, { status: 400 })
+    // Support both single playerId and array of playerIds
+    const playerIdsToAdd = playerIds && Array.isArray(playerIds) ? playerIds : playerId ? [playerId] : []
+    
+    if (playerIdsToAdd.length === 0) {
+      return NextResponse.json({ error: "Missing playerId or playerIds" }, { status: 400 })
     }
 
-    // Check if player exists
-    const player = await prisma.user.findUnique({
-      where: { id: playerId },
-      select: { gender: true },
-    })
+    const created = []
+    const errors = []
 
-    if (!player) {
-      return NextResponse.json({ error: "Player not found" }, { status: 404 })
-    }
+    for (const pid of playerIdsToAdd) {
+      try {
+        // Check if player exists
+        const player = await prisma.user.findUnique({
+          where: { id: pid },
+          select: { gender: true },
+        })
 
-    // Validate gender compatibility
-    if (team.category === "MALE" && player.gender !== "MALE") {
-      return NextResponse.json(
-        { error: "Erkek takımına sadece erkek oyuncular eklenebilir" },
-        { status: 400 }
-      )
-    }
+        if (!player) {
+          errors.push(`Oyuncu bulunamadı: ${pid}`)
+          continue
+        }
 
-    if (team.category === "FEMALE" && player.gender !== "FEMALE") {
-      return NextResponse.json(
-        { error: "Kadın takımına sadece kadın oyuncular eklenebilir" },
-        { status: 400 }
-      )
-    }
+        // Validate gender compatibility
+        if (team.category === "MALE" && player.gender !== "MALE") {
+          errors.push(`Erkek takımına sadece erkek oyuncular eklenebilir: ${pid}`)
+          continue
+        }
 
-    // Check if player is already in team
-    const existingMember = await prisma.teamPlayer.findUnique({
-      where: {
-        teamId_playerId: {
-          teamId: params.id,
-          playerId: playerId,
-        },
-      },
-    })
+        if (team.category === "FEMALE" && player.gender !== "FEMALE") {
+          errors.push(`Kadın takımına sadece kadın oyuncular eklenebilir: ${pid}`)
+          continue
+        }
 
-    if (existingMember) {
-      return NextResponse.json({ error: "Player already in team" }, { status: 400 })
-    }
-
-    // Check maxPlayers limit
-    if (team.maxPlayers !== null) {
-      const currentPlayerCount = await prisma.teamPlayer.count({
-        where: { teamId: params.id },
-      })
-      
-      if (currentPlayerCount >= team.maxPlayers) {
-        return NextResponse.json(
-          { error: `Takım maksimum oyuncu sayısına ulaştı (${team.maxPlayers})` },
-          { status: 400 }
-        )
-      }
-    }
-
-    const teamPlayer = await prisma.teamPlayer.create({
-      data: {
-        teamId: params.id,
-        playerId: playerId,
-      },
-      include: {
-        player: {
-          select: {
-            id: true,
-            name: true,
-            gender: true,
-            level: true,
-          },
-        },
-      },
-    })
-
-    // Check if team is now full and withdraw pending invitations
-    if (team.maxPlayers !== null) {
-      const newPlayerCount = await prisma.teamPlayer.count({
-        where: { teamId: params.id },
-      })
-      
-      if (newPlayerCount >= team.maxPlayers) {
-        // Withdraw all pending invitations for this team
-        await prisma.invitation.updateMany({
+        // Check if player is already in team
+        const existingMember = await prisma.teamPlayer.findUnique({
           where: {
-            teamId: params.id,
-            status: "PENDING",
-          },
-          data: {
-            status: "REJECTED",
+            teamId_playerId: {
+              teamId: params.id,
+              playerId: pid,
+            },
           },
         })
+
+        if (existingMember) {
+          errors.push(`Oyuncu zaten takımda: ${pid}`)
+          continue
+        }
+
+        // Check maxPlayers limit
+        if (team.maxPlayers !== null) {
+          const currentPlayerCount = await prisma.teamPlayer.count({
+            where: { teamId: params.id },
+          })
+          
+          if (currentPlayerCount >= team.maxPlayers) {
+            errors.push(`Takım maksimum oyuncu sayısına ulaştı (${team.maxPlayers}): ${pid}`)
+            continue
+          }
+        }
+
+        const teamPlayer = await prisma.teamPlayer.create({
+          data: {
+            teamId: params.id,
+            playerId: pid,
+          },
+          include: {
+            player: {
+              select: {
+                id: true,
+                name: true,
+                gender: true,
+                level: true,
+              },
+            },
+          },
+        })
+
+        created.push(teamPlayer)
+
+        // Check if team is now full and withdraw pending invitations
+        if (team.maxPlayers !== null) {
+          const newPlayerCount = await prisma.teamPlayer.count({
+            where: { teamId: params.id },
+          })
+          
+          if (newPlayerCount >= team.maxPlayers) {
+            // Withdraw all pending invitations for this team
+            await prisma.invitation.updateMany({
+              where: {
+                teamId: params.id,
+                status: "PENDING",
+              },
+              data: {
+                status: "REJECTED",
+              },
+            })
+          }
+        }
+      } catch (error: any) {
+        if (error.code === "P2002") {
+          errors.push(`Oyuncu zaten takımda: ${pid}`)
+        } else {
+          errors.push(`Hata: ${pid} - ${error.message || "Bilinmeyen hata"}`)
+        }
       }
     }
 
-    return NextResponse.json(teamPlayer)
+    // If single player, return single object for backward compatibility
+    if (playerIdsToAdd.length === 1 && created.length === 1) {
+      return NextResponse.json(created[0])
+    }
+
+    // For batch, return summary
+    return NextResponse.json({
+      created: created.length,
+      errors: errors.length > 0 ? errors : undefined,
+      players: created,
+    })
   } catch (error: any) {
     console.error("Error adding player to team:", error)
     if (error.code === "P2002") {
