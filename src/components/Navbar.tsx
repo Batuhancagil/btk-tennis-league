@@ -105,28 +105,28 @@ export default function Navbar() {
                   href="/admin"
                   className="text-sm font-medium text-gray-700 hover:text-tennis-green transition-colors px-2 py-1 rounded"
                 >
-                  Admin
+                  superadmin
                 </Link>
                 <span className="text-gray-300">|</span>
                 <Link
                   href="/manager"
                   className="text-sm font-medium text-gray-700 hover:text-tennis-green transition-colors px-2 py-1 rounded"
                 >
-                  Manager
+                  Ligler
                 </Link>
                 <span className="text-gray-300">|</span>
                 <Link
                   href="/captain"
                   className="text-sm font-medium text-gray-700 hover:text-tennis-green transition-colors px-2 py-1 rounded"
                 >
-                  Captain
+                  Takımlar
                 </Link>
                 <span className="text-gray-300">|</span>
                 <Link
                   href="/player"
                   className="text-sm font-medium text-gray-700 hover:text-tennis-green transition-colors px-2 py-1 rounded"
                 >
-                  Player
+                  Profil
                 </Link>
               </div>
             )}
@@ -226,28 +226,28 @@ export default function Navbar() {
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="block px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                 >
-                  Admin
+                  superadmin
                 </Link>
                 <Link
                   href="/manager"
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="block px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                 >
-                  Manager
+                  Ligler
                 </Link>
                 <Link
                   href="/captain"
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="block px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                 >
-                  Captain
+                  Takımlar
                 </Link>
                 <Link
                   href="/player"
                   onClick={() => setIsMobileMenuOpen(false)}
                   className="block px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                 >
-                  Player
+                  Profil
                 </Link>
               </div>
             )}
