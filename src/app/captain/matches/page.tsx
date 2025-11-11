@@ -146,7 +146,10 @@ export default function CaptainMatchesPage() {
 
         <div className="space-y-4">
           {matches.map((match) => {
-            const isHomeTeam = teams.some((t) => t.id === match.homeTeam.id)
+            // Skip matches without teams (individual league matches are already filtered)
+            if (!match.homeTeam || !match.awayTeam) return null
+
+            const isHomeTeam = teams.some((t) => t.id === match.homeTeam!.id)
             const myTeam = isHomeTeam ? match.homeTeam : match.awayTeam
             const opponentTeam = isHomeTeam ? match.awayTeam : match.homeTeam
 
@@ -251,7 +254,7 @@ export default function CaptainMatchesPage() {
               <form onSubmit={handleSubmitScore} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium mb-2">
-                    {selectedMatch.homeTeam.name} Skoru
+                    {selectedMatch.homeTeam?.name || "Ev Sahibi"} Skoru
                   </label>
                   <input
                     type="number"
@@ -264,7 +267,7 @@ export default function CaptainMatchesPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-2">
-                    {selectedMatch.awayTeam.name} Skoru
+                    {selectedMatch.awayTeam?.name || "Deplasman"} Skoru
                   </label>
                   <input
                     type="number"

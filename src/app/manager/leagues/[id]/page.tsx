@@ -554,13 +554,17 @@ export default function LeagueDetailPage() {
             <div>
               <h2 className="text-2xl font-semibold mb-4">Maçlar</h2>
             <div className="space-y-2">
-              {matches.map((match) => (
-                <div key={match.id} className="bg-white rounded-lg shadow p-4">
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex-1">
-                      <p className="font-medium">
-                        {match.homeTeam.name} vs {match.awayTeam.name}
-                      </p>
+              {matches.map((match) => {
+                // This section is for doubles league matches only
+                if (!match.homeTeam || !match.awayTeam) return null
+
+                return (
+                  <div key={match.id} className="bg-white rounded-lg shadow p-4">
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex-1">
+                        <p className="font-medium">
+                          {match.homeTeam.name} vs {match.awayTeam.name}
+                        </p>
                       {match.status === MatchStatus.PLAYED && match.homeScore !== null && match.awayScore !== null && (
                         <p className="text-lg font-semibold">
                           {match.homeScore} - {match.awayScore}
@@ -596,8 +600,9 @@ export default function LeagueDetailPage() {
                       Onaylayan: {match.approvedBy.name}
                     </p>
                   )}
-                </div>
-              ))}
+                  </div>
+                )
+              })}
               {matches.length === 0 && (
                 <div className="bg-white rounded-lg shadow p-4 text-center">
                   <p className="text-gray-500">Henüz maç yok</p>

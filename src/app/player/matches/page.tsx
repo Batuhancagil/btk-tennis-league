@@ -190,11 +190,11 @@ export default function PlayerMatchesPage() {
             let opponentName: string
 
             if (isIndividual) {
-              if (match.homePlayer?.id === session?.user.id) {
+              if (match.homePlayer?.id === session?.user.id && match.homePlayer) {
                 isHome = true
                 playerName = match.homePlayer.name
                 opponentName = match.awayPlayer?.name || "Bilinmeyen"
-              } else if (match.awayPlayer?.id === session?.user.id) {
+              } else if (match.awayPlayer?.id === session?.user.id && match.awayPlayer) {
                 isHome = false
                 playerName = match.awayPlayer.name
                 opponentName = match.homePlayer?.name || "Bilinmeyen"
