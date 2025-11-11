@@ -188,7 +188,8 @@ export function formatTennisScore(sets: SetScore[]): string {
       if (set.tiebreak && set.tiebreakScore) {
         const winner = set.reporter > set.opponent ? set.reporter : set.opponent
         const loser = set.reporter > set.opponent ? set.opponent : set.reporter
-        return `${winner}-${loser}(${set.tiebreakScore.reporter > set.tiebreakScore.opponent ? set.tiebreakScore.reporter : set.tiebreakScore.opponent})`
+        const tiebreakWinner = set.tiebreakScore.reporter > set.tiebreakScore.opponent ? set.tiebreakScore.reporter : set.tiebreakScore.opponent
+        return `${winner}-${loser}(${tiebreakWinner})`
       }
       return `${set.reporter}-${set.opponent}`
     })

@@ -6,6 +6,7 @@ import Navbar from "@/components/Navbar"
 import Link from "next/link"
 import { MatchStatus, MatchType, LeagueFormat, ScoreStatus } from "@prisma/client"
 import TennisScoreInput from "@/components/TennisScoreInput"
+import MatchChat from "@/components/MatchChat"
 import { formatTennisScore, type SetScore } from "@/lib/tennis-scoring"
 
 interface Match {
@@ -70,6 +71,7 @@ export default function PlayerMatchesPage() {
   const [loading, setLoading] = useState(true)
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null)
   const [showScoreForm, setShowScoreForm] = useState(false)
+  const [expandedChatMatchId, setExpandedChatMatchId] = useState<string | null>(null)
   const [stats, setStats] = useState({
     totalMatches: 0,
     wins: 0,
@@ -404,7 +406,30 @@ export default function PlayerMatchesPage() {
                         {myScoreReport ? "Skoru Güncelle" : "Skor Bildir"}
                       </button>
                     )}
+                  {/* Chat button - show for matches created from match requests (accepted matches) */}
+                  {match.matchRequestId && (
+                    <button
+                      onClick={() => {
+                        setExpandedChatMatchId(
+                          expandedChatMatchId === match.id ? null : match.id
+                        )
+                      }}
+                      className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+                    >
+                      {expandedChatMatchId === match.id ? "Chat'i Kapat" : "Chat"}
+                    </button>
+                  )}
                 </div>
+
+                {/* Chat Section */}
+                {expandedChatMatchId === match.id && match.matchRequestId && (
+                  <div className="mt-4 border-t border-gray-200 pt-4">
+                    <h3 className="text-lg font-semibold mb-3">Maç Chat'i</h3>
+                    <div className="h-96">
+                      <MatchChat matchId={match.id} />
+                    </div>
+                  </div>
+                )}
               </div>
             )
           })}

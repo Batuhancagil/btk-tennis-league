@@ -621,40 +621,6 @@ export default function ManagerDashboard() {
     }
   }
 
-  const handleGenerateFixtures = async (leagueId: string) => {
-    const matchType = prompt("Maç tipi seçin (SINGLE veya DOUBLE):", "DOUBLE")
-    if (!matchType || !["SINGLE", "DOUBLE"].includes(matchType)) {
-      alert("Geçersiz maç tipi")
-      return
-    }
-
-    const startDate = prompt("Başlangıç tarihi (YYYY-MM-DD):", new Date().toISOString().split("T")[0])
-    if (!startDate) {
-      alert("Geçersiz tarih")
-      return
-    }
-
-    try {
-      const res = await fetch(`/api/leagues/${leagueId}/fixtures`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          matchType,
-          startDate,
-        }),
-      })
-      if (res.ok) {
-        alert("Fikstür oluşturuldu")
-        fetchLeagues()
-      } else {
-        const error = await res.json()
-        alert(error.error || "Hata oluştu")
-      }
-    } catch (error) {
-      console.error("Error generating fixtures:", error)
-      alert("Hata oluştu")
-    }
-  }
 
   const handleDownloadTemplate = async () => {
     try {
@@ -740,7 +706,7 @@ export default function ManagerDashboard() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
           <div>
             <h1 className="text-4xl font-bold text-gray-900 mb-2">Lig Yöneticisi Paneli</h1>
-            <p className="text-gray-600">Liglerinizi yönetin ve fikstür oluşturun</p>
+            <p className="text-gray-600">Liglerinizi yönetin</p>
           </div>
         </div>
 
@@ -1305,6 +1271,11 @@ export default function ManagerDashboard() {
                         : "Mix"}
                     </span>
                     <span className="text-gray-600 font-medium">{league.season}</span>
+                    {league.format === LeagueFormat.INDIVIDUAL && (
+                      <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-lg text-sm font-semibold">
+                        Oyuncu: {league._count?.leaguePlayers || 0}
+                      </span>
+                    )}
                   </div>
                   <p className="text-sm text-gray-600">
                     Durum:{" "}
@@ -1514,16 +1485,6 @@ export default function ManagerDashboard() {
                     )}
                   </div>
                 )}
-                {((league.format === LeagueFormat.DOUBLES && league.teams.length >= 2) ||
-                  (league.format === LeagueFormat.INDIVIDUAL && league._count.leaguePlayers >= 2)) &&
-                  league._count.matches === 0 && (
-                    <button
-                      onClick={() => handleGenerateFixtures(league.id)}
-                      className="px-6 py-2 bg-tennis-green text-white rounded-xl hover:bg-tennis-green/90 transition-colors font-semibold whitespace-nowrap"
-                    >
-                      Fikstür Oluştur
-                    </button>
-                  )}
               </div>
             </div>
           ))}

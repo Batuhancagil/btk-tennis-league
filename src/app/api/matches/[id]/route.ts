@@ -255,14 +255,21 @@ export async function PATCH(
         updateData.gamesWonAway = gamesWonAway
         updateData.approvedAt = new Date()
       }
-      // Regular updates (status, scheduledDate)
-      else {
-        if (data.status) updateData.status = data.status as MatchStatus
-        if (data.scheduledDate !== undefined)
-          updateData.scheduledDate = data.scheduledDate
-            ? new Date(data.scheduledDate)
-            : null
+      // Manager can update scheduledDate (must be manager of the league)
+      if (data.scheduledDate !== undefined) {
+        // Check if user is manager of this league
+        if (
+          match.league.managerId !== session.user.id &&
+          session.user.role !== UserRole.SUPERADMIN
+        ) {
+          return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
+        }
+        updateData.scheduledDate = data.scheduledDate
+          ? new Date(data.scheduledDate)
+          : null
       }
+      // Regular updates (status)
+      if (data.status) updateData.status = data.status as MatchStatus
     } else {
       // Non-managers can only update scheduledDate
       if (data.scheduledDate !== undefined)

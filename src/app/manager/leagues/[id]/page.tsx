@@ -5,8 +5,9 @@ import { useEffect, useState, useCallback } from "react"
 import { useParams } from "next/navigation"
 import Navbar from "@/components/Navbar"
 import Link from "next/link"
-import { MatchStatus, MatchType, LeagueFormat, ScoreStatus } from "@prisma/client"
+import { MatchStatus, MatchType, LeagueFormat, ScoreStatus, LeagueStatus } from "@prisma/client"
 import { formatTennisScore, type SetScore } from "@/lib/tennis-scoring"
+import LeagueDeleteConfirm from "@/components/LeagueDeleteConfirm"
 
 interface Match {
   id: string
@@ -75,6 +76,11 @@ export default function LeagueDetailPage() {
   const [selectedPlayersForAdd, setSelectedPlayersForAdd] = useState<string[]>([])
   const [searchQuery, setSearchQuery] = useState<string>("")
   const [dropdownOpen, setDropdownOpen] = useState<boolean>(false)
+  const [activeTab, setActiveTab] = useState<"standings" | "matches" | "players" | "settings">("standings")
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deletingLeague, setDeletingLeague] = useState(false)
+  const [editingMatchDate, setEditingMatchDate] = useState<string | null>(null)
+  const [newMatchDate, setNewMatchDate] = useState<string>("")
 
   const fetchLeague = useCallback(async () => {
     try {
@@ -491,14 +497,87 @@ export default function LeagueDetailPage() {
     )
   }
 
-  const pendingMatches = matches.filter(
-    (m) =>
-      m.status === MatchStatus.SCHEDULED &&
-      m.homeScore !== null &&
-      m.awayScore !== null &&
-      ((league.format === LeagueFormat.DOUBLES && m.homeTeam && m.awayTeam) ||
-        (league.format === LeagueFormat.INDIVIDUAL && m.homePlayer && m.awayPlayer))
-  )
+  const handleStartLeague = async () => {
+    if (!confirm("Ligi başlatmak istediğinize emin misiniz?")) return
+
+    try {
+      const res = await fetch(`/api/leagues/${leagueId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "startLeague" }),
+      })
+
+      if (res.ok) {
+        await fetchLeague()
+        alert("Lig başlatıldı")
+      } else {
+        const error = await res.json()
+        alert(error.error || "Hata oluştu")
+      }
+    } catch (error) {
+      console.error("Error starting league:", error)
+      alert("Hata oluştu")
+    }
+  }
+
+  const handleDeleteLeague = async () => {
+    try {
+      setDeletingLeague(true)
+      const matchesCount = matches.length
+      const res = await fetch(`/api/leagues/${leagueId}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmation: "DELETE" }),
+      })
+
+      if (res.ok) {
+        window.location.href = "/manager"
+      } else {
+        const error = await res.json()
+        alert(error.error || "Hata oluştu")
+      }
+    } catch (error) {
+      console.error("Error deleting league:", error)
+      alert("Hata oluştu")
+    } finally {
+      setDeletingLeague(false)
+      setShowDeleteConfirm(false)
+    }
+  }
+
+  const handleUpdateMatchDate = async (matchId: string) => {
+    if (!newMatchDate) {
+      alert("Lütfen bir tarih seçin")
+      return
+    }
+
+    try {
+      const res = await fetch(`/api/matches/${matchId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scheduledDate: newMatchDate }),
+      })
+
+      if (res.ok) {
+        await fetchMatches()
+        setEditingMatchDate(null)
+        setNewMatchDate("")
+      } else {
+        const error = await res.json()
+        alert(error.error || "Hata oluştu")
+      }
+    } catch (error) {
+      console.error("Error updating match date:", error)
+      alert("Hata oluştu")
+    }
+  }
+
+  const filteredMatches = matches.filter((match) => {
+    if (filter === "ALL") return true
+    return match.status === filter
+  })
+
+  const playerCount = leaguePlayers.length
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -508,20 +587,39 @@ export default function LeagueDetailPage() {
           <div>
             <h1 className="text-3xl font-bold">{league.name}</h1>
             <p className="text-gray-600">{league.season}</p>
-            <p className="text-sm text-gray-500">
-              Format: {league.format === LeagueFormat.DOUBLES ? "Çiftler Ligi" : "Bireysel Lig"}
-            </p>
+            <div className="flex gap-4 mt-2">
+              <p className="text-sm text-gray-500">
+                Format: {league.format === LeagueFormat.DOUBLES ? "Çiftler Ligi" : "Bireysel Lig"}
+              </p>
+              {league.format === LeagueFormat.INDIVIDUAL && (
+                <p className="text-sm text-gray-500">
+                  Oyuncu Sayısı: <span className="font-semibold">{playerCount}</span>
+                </p>
+              )}
+              <p className="text-sm text-gray-500">
+                Durum: <span className={`font-semibold ${
+                  league.status === LeagueStatus.ACTIVE ? "text-green-600" :
+                  league.status === LeagueStatus.COMPLETED ? "text-blue-600" :
+                  "text-gray-600"
+                }`}>
+                  {league.status === LeagueStatus.DRAFT ? "Taslak" :
+                   league.status === LeagueStatus.ACTIVE ? "Aktif" :
+                   league.status === LeagueStatus.COMPLETED ? "Tamamlandı" :
+                   "İptal"}
+                </span>
+              </p>
+            </div>
           </div>
           <div className="flex gap-3">
             <button
               onClick={() => setShowExcelUpload(!showExcelUpload)}
-              className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600"
+              className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors"
             >
               {showExcelUpload ? "İptal" : "📊 Excel ile Yükle"}
             </button>
             <Link
               href="/manager"
-              className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+              className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
             >
               Geri
             </Link>
@@ -557,185 +655,160 @@ export default function LeagueDetailPage() {
           </div>
         )}
 
-        <div className="mb-4 flex gap-2">
-          <button
-            onClick={() => setFilter("ALL")}
-            className={`px-4 py-2 rounded ${
-              filter === "ALL" ? "bg-blue-500 text-white" : "bg-white"
-            }`}
-          >
-            Tümü
-          </button>
-          <button
-            onClick={() => setFilter(MatchStatus.SCHEDULED)}
-            className={`px-4 py-2 rounded ${
-              filter === MatchStatus.SCHEDULED ? "bg-blue-500 text-white" : "bg-white"
-            }`}
-          >
-            Planlanan
-          </button>
-          <button
-            onClick={() => setFilter(MatchStatus.PLAYED)}
-            className={`px-4 py-2 rounded ${
-              filter === MatchStatus.PLAYED ? "bg-blue-500 text-white" : "bg-white"
-            }`}
-          >
-            Oynanan
-          </button>
+        {/* Tab Navigation */}
+        <div className="border-b border-gray-200 mb-6">
+          <nav className="flex gap-2">
+            <button
+              onClick={() => setActiveTab("standings")}
+              className={`px-4 py-2 font-medium transition-colors ${
+                activeTab === "standings"
+                  ? "text-tennis-green border-b-2 border-tennis-green"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              Puan Tablosu
+            </button>
+            <button
+              onClick={() => setActiveTab("matches")}
+              className={`px-4 py-2 font-medium transition-colors ${
+                activeTab === "matches"
+                  ? "text-tennis-green border-b-2 border-tennis-green"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              Maçlar
+            </button>
+            {league.format === LeagueFormat.INDIVIDUAL && (
+              <button
+                onClick={() => setActiveTab("players")}
+                className={`px-4 py-2 font-medium transition-colors ${
+                  activeTab === "players"
+                    ? "text-tennis-green border-b-2 border-tennis-green"
+                    : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                Oyuncular ({playerCount})
+              </button>
+            )}
+            <button
+              onClick={() => setActiveTab("settings")}
+              className={`px-4 py-2 font-medium transition-colors ${
+                activeTab === "settings"
+                  ? "text-tennis-green border-b-2 border-tennis-green"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              Ayarlar
+            </button>
+          </nav>
         </div>
 
-        {pendingMatches.length > 0 && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-            <h2 className="text-lg font-semibold mb-2">Onay Bekleyen Maçlar ({pendingMatches.length})</h2>
-            <div className="space-y-2">
-              {pendingMatches.map((match) => {
-                const isIndividual = league.format === LeagueFormat.INDIVIDUAL
-                const homeName = isIndividual
-                  ? match.homePlayer?.name || "Bilinmeyen"
-                  : match.homeTeam?.name || "Bilinmeyen"
-                const awayName = isIndividual
-                  ? match.awayPlayer?.name || "Bilinmeyen"
-                  : match.awayTeam?.name || "Bilinmeyen"
-
-                return (
-                  <div key={match.id} className="flex items-center justify-between p-2 bg-white rounded">
-                    <div>
-                      <p className="font-medium">
-                        {homeName} {match.homeScore} - {match.awayScore} {awayName}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {match.scheduledDate
-                          ? new Date(match.scheduledDate).toLocaleDateString("tr-TR")
-                          : "Tarih belirlenmedi"}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => handleApproveMatch(match.id)}
-                      className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
-                    >
-                      Onayla
-                    </button>
-                  </div>
-                )
-              })}
+        {/* Tab Content */}
+        {activeTab === "standings" && (
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <h2 className="text-2xl font-semibold mb-4">Lig Tablosu</h2>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">#</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                      {league.format === LeagueFormat.DOUBLES ? "Takım" : "İsim"}
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Maç Sayısı</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Galibiyet</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Mağlubiyet</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Kazandığı Set</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Kaybettiği Set</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Kazandığı Oyun</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Kaybettiği Oyun</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Set Averajı</th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Oyun Averajı</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {table.map((entry, index) => (
+                    <tr key={entry.id}>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">{index + 1}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">{entry.name}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-center">{entry.played}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-center text-green-600 font-semibold">{entry.won}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-center text-red-600 font-semibold">{entry.lost}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-center">{entry.setsWon}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-center">{entry.setsLost}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-center">{entry.gamesWon}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-center">{entry.gamesLost}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold">{entry.setAverage.toFixed(2)}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold">{entry.gameAverage.toFixed(2)}</td>
+                    </tr>
+                  ))}
+                  {table.length === 0 && (
+                    <tr>
+                      <td colSpan={11} className="px-4 py-3 text-center text-sm text-gray-500">
+                        {league.format === LeagueFormat.DOUBLES ? "Henüz takım yok" : "Henüz oyuncu yok"}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
 
-        {league.format === LeagueFormat.DOUBLES ? (
-          <div className="grid gap-6 md:grid-cols-2">
-            <div>
-              <h2 className="text-2xl font-semibold mb-4">Lig Tablosu</h2>
-              <div className="bg-white rounded-lg shadow overflow-hidden">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                        #
-                      </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                        {league?.format === LeagueFormat.DOUBLES ? "Takım" : "İsim"}
-                      </th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                        Maç Sayısı
-                      </th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                        Galibiyet
-                      </th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                        Mağlubiyet
-                      </th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                        Kazandığı Set
-                      </th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                        Kaybettiği Set
-                      </th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                        Kazandığı Oyun
-                      </th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                        Kaybettiği Oyun
-                      </th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                        Set Averajı
-                      </th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                        Oyun Averajı
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {table.map((entry, index) => (
-                      <tr key={entry.id}>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
-                          {index + 1}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
-                          {entry.name}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
-                          {entry.played}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-center text-green-600 font-semibold">
-                          {entry.won}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-center text-red-600 font-semibold">
-                          {entry.lost}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
-                          {entry.setsWon}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
-                          {entry.setsLost}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
-                          {entry.gamesWon}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
-                          {entry.gamesLost}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold">
-                          {entry.setAverage.toFixed(2)}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold">
-                          {entry.gameAverage.toFixed(2)}
-                        </td>
-                      </tr>
-                    ))}
-                    {table.length === 0 && (
-                      <tr>
-                        <td colSpan={11} className="px-4 py-3 text-center text-sm text-gray-500">
-                          {league?.format === LeagueFormat.DOUBLES ? "Henüz takım yok" : "Henüz oyuncu yok"}
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+        {activeTab === "matches" && (
+          <div className="space-y-6">
+            {/* Filter Buttons */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => setFilter("ALL")}
+                className={`px-4 py-2 rounded-lg transition-colors ${
+                  filter === "ALL" ? "bg-tennis-green text-white" : "bg-white text-gray-700 hover:bg-gray-50"
+                }`}
+              >
+                Tümü
+              </button>
+              <button
+                onClick={() => setFilter(MatchStatus.SCHEDULED)}
+                className={`px-4 py-2 rounded-lg transition-colors ${
+                  filter === MatchStatus.SCHEDULED ? "bg-tennis-green text-white" : "bg-white text-gray-700 hover:bg-gray-50"
+                }`}
+              >
+                Planlanan
+              </button>
+              <button
+                onClick={() => setFilter(MatchStatus.PLAYED)}
+                className={`px-4 py-2 rounded-lg transition-colors ${
+                  filter === MatchStatus.PLAYED ? "bg-tennis-green text-white" : "bg-white text-gray-700 hover:bg-gray-50"
+                }`}
+              >
+                Oynanan
+              </button>
             </div>
 
-            <div>
-              <h2 className="text-2xl font-semibold mb-4">Maçlar</h2>
-            <div className="space-y-2">
-              {matches.map((match) => {
-                // Show matches based on league format
+            {/* Matches Grid */}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {filteredMatches.map((match) => {
                 if (league.format === LeagueFormat.DOUBLES && (!match.homeTeam || !match.awayTeam)) return null
                 if (league.format === LeagueFormat.INDIVIDUAL && (!match.homePlayer || !match.awayPlayer)) return null
 
+                const homeName = league.format === LeagueFormat.INDIVIDUAL
+                  ? match.homePlayer?.name || "Bilinmeyen"
+                  : match.homeTeam?.name || "Bilinmeyen"
+                const awayName = league.format === LeagueFormat.INDIVIDUAL
+                  ? match.awayPlayer?.name || "Bilinmeyen"
+                  : match.awayTeam?.name || "Bilinmeyen"
+
                 return (
-                  <div key={match.id} className="bg-white rounded-lg shadow p-4">
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="flex-1">
-                        <p className="font-medium">
-                          {match.homePlayer?.name || match.homeTeam?.name || "Bilinmeyen"} vs{" "}
-                          {match.awayPlayer?.name || match.awayTeam?.name || "Bilinmeyen"}
-                        </p>
+                  <div key={match.id} className="bg-white rounded-lg shadow p-4 hover:shadow-md transition-shadow">
+                    <div className="mb-3">
+                      <p className="font-semibold text-gray-900 mb-1">
+                        {homeName} vs {awayName}
+                      </p>
                       {(match.scoreStatus === ScoreStatus.APPROVED ||
                         match.scoreStatus === ScoreStatus.MANAGER_ENTERED) &&
                         match.setsWonHome !== null &&
                         match.setsWonAway !== null && (
-                          <p className="text-lg font-semibold">
+                          <p className="text-lg font-bold text-tennis-green">
                             {match.setsWonHome} - {match.setsWonAway} Set
                             {match.gamesWonHome !== null && match.gamesWonAway !== null && (
                               <span className="text-sm text-gray-600 ml-2">
@@ -748,209 +821,15 @@ export default function LeagueDetailPage() {
                         match.scoreStatus !== ScoreStatus.APPROVED &&
                         match.scoreStatus !== ScoreStatus.MANAGER_ENTERED &&
                         match.scoreStatus !== ScoreStatus.PENDING && (
-                          <p className="text-sm text-orange-600">Onay Bekliyor</p>
+                          <p className="text-sm text-orange-600 font-medium">Onay Bekliyor</p>
                         )}
-                      <p className="text-sm text-gray-500">
-                        {match.matchType === MatchType.SINGLE ? "Single" : "Double"}
-                      </p>
-                      {match.scheduledDate && (
-                        <p className="text-sm text-gray-500">
-                          {new Date(match.scheduledDate).toLocaleDateString("tr-TR")}
-                        </p>
-                      )}
-                    </div>
-                    <span
-                      className={`px-2 py-1 rounded text-xs ${
-                        match.status === MatchStatus.PLAYED
-                          ? "bg-green-100 text-green-800"
-                          : match.status === MatchStatus.CANCELLED
-                          ? "bg-red-100 text-red-800"
-                          : "bg-yellow-100 text-yellow-800"
-                      }`}
-                    >
-                      {match.status === MatchStatus.PLAYED
-                        ? "Oynandı"
-                        : match.status === MatchStatus.CANCELLED
-                        ? "İptal"
-                        : "Planlandı"}
-                    </span>
-                  </div>
-                  {match.approvedBy && (
-                    <p className="text-xs text-gray-500">
-                      Onaylayan: {match.approvedBy.name}
-                    </p>
-                  )}
-                  </div>
-                )
-              })}
-              {matches.length === 0 && (
-                <div className="bg-white rounded-lg shadow p-4 text-center">
-                  <p className="text-gray-500">Henüz maç yok</p>
-                </div>
-              )}
-            </div>
-            </div>
-          </div>
-        ) : (
-          <div className="grid gap-6 md:grid-cols-2">
-            <div>
-              <h2 className="text-2xl font-semibold mb-4">Lig Oyuncuları</h2>
-              <div className="bg-white rounded-lg shadow p-4 mb-4">
-                <div className="mb-4">
-                  <label className="block text-sm font-medium mb-2">Oyuncu Ekle</label>
-                  <div className="relative dropdown-container">
-                    <div className="flex gap-2 mb-2">
-                      <div className="flex-1 relative">
-                        <input
-                          type="text"
-                          placeholder="Oyuncu ara..."
-                          value={searchQuery}
-                          onChange={(e) => {
-                            setSearchQuery(e.target.value)
-                            setDropdownOpen(true)
-                          }}
-                          onFocus={() => setDropdownOpen(true)}
-                          className="w-full border rounded px-3 py-2 pr-10"
-                        />
-                        {searchQuery && (
-                          <button
-                            onClick={() => {
-                              setSearchQuery("")
-                              setDropdownOpen(false)
-                            }}
-                            className="absolute right-2 top-2 text-gray-400 hover:text-gray-600"
-                          >
-                            ✕
-                          </button>
-                        )}
-                      </div>
-                      <button
-                        onClick={handleAddSelectedPlayers}
-                        disabled={selectedPlayersForAdd.length === 0}
-                        className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        Ekle ({selectedPlayersForAdd.length})
-                      </button>
                     </div>
 
-                    {/* Selected players chips */}
-                    {selectedPlayersForAdd.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mb-2">
-                        {selectedPlayersForAdd.map((playerId) => {
-                          const player = allPlayers.find(p => p.id === playerId)
-                          if (!player) return null
-                          return (
-                            <span
-                              key={playerId}
-                              className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm"
-                            >
-                              {player.name}
-                              <button
-                                onClick={() => togglePlayerSelection(playerId)}
-                                className="text-blue-600 hover:text-blue-800"
-                              >
-                                ✕
-                              </button>
-                            </span>
-                          )
-                        })}
-                      </div>
-                    )}
-
-                    {/* Dropdown */}
-                    {dropdownOpen && (
-                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-60 overflow-y-auto">
-                        {getAvailablePlayers().length === 0 ? (
-                          <div className="p-3 text-gray-500 text-sm">Oyuncu bulunamadı</div>
-                        ) : (
-                          getAvailablePlayers().map((player) => {
-                            const isSelected = selectedPlayersForAdd.includes(player.id)
-                            return (
-                              <div
-                                key={player.id}
-                                onClick={() => togglePlayerSelection(player.id)}
-                                className={`p-2 hover:bg-gray-100 cursor-pointer flex items-center justify-between ${
-                                  isSelected ? "bg-blue-50" : ""
-                                }`}
-                              >
-                                <span className="text-sm">
-                                  {player.name} ({player.level || "Seviye yok"})
-                                </span>
-                                <input
-                                  type="checkbox"
-                                  checked={isSelected}
-                                  onChange={() => {}}
-                                  onClick={(e) => e.stopPropagation()}
-                                  className="ml-2"
-                                />
-                              </div>
-                            )
-                          })
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  {leaguePlayers.length > 0 ? (
-                    leaguePlayers.map((lp: any) => (
-                      <div
-                        key={lp.id}
-                        className="flex items-center justify-between p-2 bg-gray-50 rounded"
-                      >
-                        <span className="text-sm">
-                          {lp.player.name} ({lp.player.level || "Seviye yok"})
-                        </span>
-                        <button
-                          onClick={() => handleRemovePlayerFromLeague(lp.player.id)}
-                          className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600"
-                        >
-                          Çıkar
-                        </button>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-gray-500 text-sm">Henüz oyuncu yok</p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h2 className="text-2xl font-semibold mb-4">Maçlar</h2>
-              <div className="space-y-2">
-                {matches.map((match) => {
-                  const isIndividual = league.format === LeagueFormat.INDIVIDUAL
-                  const homeName = isIndividual
-                    ? match.homePlayer?.name || "Bilinmeyen"
-                    : match.homeTeam?.name || "Bilinmeyen"
-                  const awayName = isIndividual
-                    ? match.awayPlayer?.name || "Bilinmeyen"
-                    : match.awayTeam?.name || "Bilinmeyen"
-
-                  return (
-                    <div key={match.id} className="bg-white rounded-lg shadow p-4">
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="flex-1">
-                          <p className="font-medium">
-                            {homeName} vs {awayName}
-                          </p>
-                          {match.status === MatchStatus.PLAYED && match.homeScore !== null && match.awayScore !== null && (
-                            <p className="text-lg font-semibold">
-                              {match.homeScore} - {match.awayScore}
-                            </p>
-                          )}
-                          <p className="text-sm text-gray-500">
-                            {match.matchType === MatchType.SINGLE ? "Single" : "Double"}
-                          </p>
-                          {match.scheduledDate && (
-                            <p className="text-sm text-gray-500">
-                              {new Date(match.scheduledDate).toLocaleDateString("tr-TR")}
-                            </p>
-                          )}
-                        </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-500">Durum:</span>
                         <span
-                          className={`px-2 py-1 rounded text-xs ${
+                          className={`px-2 py-1 rounded text-xs font-medium ${
                             match.status === MatchStatus.PLAYED
                               ? "bg-green-100 text-green-800"
                               : match.status === MatchStatus.CANCELLED
@@ -965,25 +844,238 @@ export default function LeagueDetailPage() {
                             : "Planlandı"}
                         </span>
                       </div>
-                      {match.approvedBy && (
-                        <p className="text-xs text-gray-500">
-                          Onaylayan: {match.approvedBy.name}
-                        </p>
-                      )}
+
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-500">Tarih:</span>
+                        {editingMatchDate === match.id ? (
+                          <div className="flex gap-2">
+                            <input
+                              type="date"
+                              value={newMatchDate}
+                              onChange={(e) => setNewMatchDate(e.target.value)}
+                              className="px-2 py-1 border border-gray-300 rounded text-xs"
+                            />
+                            <button
+                              onClick={() => handleUpdateMatchDate(match.id)}
+                              className="px-2 py-1 bg-tennis-green text-white rounded text-xs hover:bg-tennis-green/90"
+                            >
+                              Kaydet
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingMatchDate(null)
+                                setNewMatchDate("")
+                              }}
+                              className="px-2 py-1 bg-gray-300 text-gray-700 rounded text-xs hover:bg-gray-400"
+                            >
+                              İptal
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span className="text-gray-700">
+                              {match.scheduledDate
+                                ? new Date(match.scheduledDate).toLocaleDateString("tr-TR")
+                                : "Belirlenmedi"}
+                            </span>
+                            <button
+                              onClick={() => {
+                                setEditingMatchDate(match.id)
+                                setNewMatchDate(
+                                  match.scheduledDate
+                                    ? new Date(match.scheduledDate).toISOString().split("T")[0]
+                                    : ""
+                                )
+                              }}
+                              className="text-tennis-green hover:text-tennis-green/80 text-xs"
+                            >
+                              ✏️
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  )
-                })}
-                {matches.length === 0 && (
-                  <div className="bg-white rounded-lg shadow p-4 text-center">
-                    <p className="text-gray-500">Henüz maç yok</p>
+                  </div>
+                )
+              })}
+            </div>
+
+            {filteredMatches.length === 0 && (
+              <div className="bg-white rounded-lg shadow p-12 text-center">
+                <p className="text-gray-500 text-lg">Henüz maç yok</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "players" && league.format === LeagueFormat.INDIVIDUAL && (
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-semibold">Lig Oyuncuları ({playerCount})</h2>
+            </div>
+            <div className="mb-6">
+              <label className="block text-sm font-medium mb-2">Oyuncu Ekle</label>
+              <div className="relative dropdown-container">
+                <div className="flex gap-2 mb-2">
+                  <div className="flex-1 relative">
+                    <input
+                      type="text"
+                      placeholder="Oyuncu ara..."
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value)
+                        setDropdownOpen(true)
+                      }}
+                      onFocus={() => setDropdownOpen(true)}
+                      className="w-full border rounded-lg px-3 py-2 pr-10 focus:ring-2 focus:ring-tennis-green focus:border-transparent"
+                    />
+                    {searchQuery && (
+                      <button
+                        onClick={() => {
+                          setSearchQuery("")
+                          setDropdownOpen(false)
+                        }}
+                        className="absolute right-2 top-2 text-gray-400 hover:text-gray-600"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleAddSelectedPlayers}
+                    disabled={selectedPlayersForAdd.length === 0}
+                    className="px-4 py-2 bg-tennis-green text-white rounded-lg hover:bg-tennis-green/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Ekle ({selectedPlayersForAdd.length})
+                  </button>
+                </div>
+
+                {selectedPlayersForAdd.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {selectedPlayersForAdd.map((playerId) => {
+                      const player = allPlayers.find((p) => p.id === playerId)
+                      if (!player) return null
+                      return (
+                        <span
+                          key={playerId}
+                          className="inline-flex items-center gap-1 px-2 py-1 bg-tennis-green/10 text-tennis-green rounded-lg text-sm"
+                        >
+                          {player.name}
+                          <button
+                            onClick={() => togglePlayerSelection(playerId)}
+                            className="text-tennis-green hover:text-tennis-green/80"
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {dropdownOpen && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {getAvailablePlayers().length === 0 ? (
+                      <div className="p-3 text-gray-500 text-sm">Oyuncu bulunamadı</div>
+                    ) : (
+                      getAvailablePlayers().map((player) => {
+                        const isSelected = selectedPlayersForAdd.includes(player.id)
+                        return (
+                          <div
+                            key={player.id}
+                            onClick={() => togglePlayerSelection(player.id)}
+                            className={`p-2 hover:bg-gray-100 cursor-pointer flex items-center justify-between ${
+                              isSelected ? "bg-tennis-green/10" : ""
+                            }`}
+                          >
+                            <span className="text-sm">
+                              {player.name} ({player.level || "Seviye yok"})
+                            </span>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {}}
+                              onClick={(e) => e.stopPropagation()}
+                              className="ml-2"
+                            />
+                          </div>
+                        )
+                      })
+                    )}
                   </div>
                 )}
               </div>
             </div>
+            <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+              {leaguePlayers.length > 0 ? (
+                leaguePlayers.map((lp: any) => (
+                  <div
+                    key={lp.id}
+                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                  >
+                    <span className="text-sm font-medium">
+                      {lp.player.name} <span className="text-gray-500">({lp.player.level || "Seviye yok"})</span>
+                    </span>
+                    <button
+                      onClick={() => handleRemovePlayerFromLeague(lp.player.id)}
+                      className="px-2 py-1 bg-red-500 text-white text-xs rounded-lg hover:bg-red-600 transition-colors"
+                    >
+                      Çıkar
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <div className="col-span-full text-center py-8 text-gray-500">Henüz oyuncu yok</div>
+              )}
+            </div>
           </div>
+        )}
+
+        {activeTab === "settings" && (
+          <div className="bg-white rounded-xl shadow-lg p-6 space-y-6">
+            <h2 className="text-2xl font-semibold">Lig Ayarları</h2>
+
+            {/* League Start */}
+            <div className="border border-gray-200 rounded-lg p-4">
+              <h3 className="text-lg font-medium mb-2">Lig Başlatma</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                Ligi başlatarak aktif hale getirebilirsiniz. Sadece taslak durumundaki ligler başlatılabilir.
+              </p>
+              <button
+                onClick={handleStartLeague}
+                disabled={league.status !== LeagueStatus.DRAFT}
+                className="px-4 py-2 bg-tennis-green text-white rounded-lg hover:bg-tennis-green/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {league.status === LeagueStatus.DRAFT ? "Ligi Başlat" : "Lig zaten başlatılmış"}
+              </button>
+            </div>
+
+            {/* League Delete */}
+            <div className="border border-red-200 rounded-lg p-4 bg-red-50">
+              <h3 className="text-lg font-medium mb-2 text-red-800">Tehlikeli Bölge</h3>
+              <p className="text-sm text-red-700 mb-4">
+                Ligi silmek tüm maçları, oyuncuları ve verileri kalıcı olarak silecektir. Bu işlem geri alınamaz.
+              </p>
+              <button
+                onClick={() => setShowDeleteConfirm(true)}
+                className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+              >
+                Ligi Sil
+              </button>
+            </div>
+          </div>
+        )}
+
+        {showDeleteConfirm && (
+          <LeagueDeleteConfirm
+            leagueName={league.name}
+            matchesCount={matches.length}
+            onConfirm={handleDeleteLeague}
+            onCancel={() => setShowDeleteConfirm(false)}
+            isDeleting={deletingLeague}
+          />
         )}
       </div>
     </div>
   )
 }
-

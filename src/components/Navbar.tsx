@@ -25,7 +25,7 @@ export default function Navbar() {
     const fetchNotificationCount = async () => {
       if (session?.user && (session.user.role === UserRole.PLAYER || session.user.role === UserRole.CAPTAIN)) {
         try {
-          const res = await fetch("/api/invitations/count")
+          const res = await fetch("/api/notifications/count")
           const data = await res.json()
           setNotificationCount(data.count || 0)
         } catch (error) {

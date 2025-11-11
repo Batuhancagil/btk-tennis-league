@@ -86,6 +86,19 @@ enum ScoreStatus {
   MANAGER_ENTERED
 }
 
+enum MatchRequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum NotificationType {
+  MATCH_REQUEST
+  MATCH_ACCEPTED
+  MATCH_REJECTED
+  MATCH_MESSAGE
+}
+
 model User {
   id            String       @id @default(cuid())
   email         String       @unique
@@ -104,8 +117,8 @@ model User {
   accounts        Account[]
   sessions        Session[]
   teams           TeamPlayer[]
-  captainTeams    Team[]         @relation("TeamCaptain")
-  managerLeagues  League[]       @relation("LeagueManager")
+  captainTeams    Team[]             @relation("TeamCaptain")
+  managerLeagues  League[]           @relation("LeagueManager")
   invitations     Invitation[]
   matchSquads     MatchSquad[]
   approvedMatches Match[]            @relation("MatchApprover")
@@ -113,6 +126,10 @@ model User {
   homeMatches     Match[]            @relation("HomePlayer")
   awayMatches     Match[]            @relation("AwayPlayer")
   scoreReports    MatchScoreReport[]
+  sentMatchRequests     MatchRequest[]  @relation("MatchRequestRequester")
+  receivedMatchRequests MatchRequest[]  @relation("MatchRequestOpponent")
+  notifications   Notification[]
+  chatMessages    MatchChat[]
 
   @@map("users")
 }
@@ -195,43 +212,47 @@ model League {
   teams         Team[]
   matches       Match[]
   leaguePlayers LeaguePlayer[]
+  matchRequests MatchRequest[]
 
   @@map("leagues")
 }
 
 model Match {
-  id                String       @id @default(cuid())
-  leagueId          String
-  homeTeamId        String?
-  awayTeamId        String?
-  homePlayerId      String?
-  awayPlayerId      String?
-  category          TeamCategory
-  matchType         MatchType
-  scheduledDate     DateTime?
-  status            MatchStatus  @default(SCHEDULED)
-  homeScore         Int?
-  awayScore         Int?
-  approvedById      String?
-  approvedAt        DateTime?
-  scoreStatus       ScoreStatus  @default(PENDING)
-  setsWonHome       Int?
+  id                 String       @id @default(cuid())
+  leagueId           String
+  homeTeamId         String?
+  awayTeamId         String?
+  homePlayerId       String?
+  awayPlayerId       String?
+  category           TeamCategory
+  matchType          MatchType
+  scheduledDate      DateTime?
+  status             MatchStatus  @default(SCHEDULED)
+  homeScore          Int?
+  awayScore          Int?
+  approvedById       String?
+  approvedAt         DateTime?
+  scoreStatus        ScoreStatus  @default(PENDING)
+  setsWonHome        Int?
   setsWonAway        Int?
   gamesWonHome       Int?
   gamesWonAway       Int?
   finalScoreReportId String?
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  matchRequestId     String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 
   // Relations
-  league            League            @relation(fields: [leagueId], references: [id])
-  homeTeam          Team?             @relation("HomeTeam", fields: [homeTeamId], references: [id])
-  awayTeam          Team?             @relation("AwayTeam", fields: [awayTeamId], references: [id])
-  homePlayer        User?             @relation("HomePlayer", fields: [homePlayerId], references: [id])
-  awayPlayer        User?             @relation("AwayPlayer", fields: [awayPlayerId], references: [id])
-  approvedBy        User?             @relation("MatchApprover", fields: [approvedById], references: [id])
-  squads            MatchSquad[]
-  scoreReports      MatchScoreReport[]
+  league       League             @relation(fields: [leagueId], references: [id])
+  matchRequest MatchRequest?     @relation(fields: [matchRequestId], references: [id])
+  chatMessages MatchChat[]
+  homeTeam     Team?              @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam     Team?              @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  homePlayer   User?              @relation("HomePlayer", fields: [homePlayerId], references: [id])
+  awayPlayer   User?              @relation("AwayPlayer", fields: [awayPlayerId], references: [id])
+  approvedBy   User?              @relation("MatchApprover", fields: [approvedById], references: [id])
+  squads       MatchSquad[]
+  scoreReports MatchScoreReport[]
 
   @@map("matches")
 }
@@ -298,15 +319,15 @@ model LeaguePlayer {
 }
 
 model MatchScoreReport {
-  id            String   @id @default(cuid())
-  matchId       String
-  reportedById  String
-  setsWon       Int
-  setsLost      Int
-  gamesWon       Int
-  gamesLost      Int
-  setScores     Json     // Array of set scores from reporter's perspective
-  createdAt     DateTime @default(now())
+  id           String   @id @default(cuid())
+  matchId      String
+  reportedById String
+  setsWon      Int
+  setsLost     Int
+  gamesWon     Int
+  gamesLost    Int
+  setScores    Json // Array of set scores from reporter's perspective
+  createdAt    DateTime @default(now())
 
   // Relations
   match    Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
@@ -314,4 +335,61 @@ model MatchScoreReport {
 
   @@unique([matchId, reportedById])
   @@map("match_score_reports")
+}
+
+model MatchRequest {
+  id            String            @id @default(cuid())
+  leagueId      String
+  requesterId   String
+  opponentId    String
+  message       String?
+  suggestedDate DateTime?
+  suggestedTime String?
+  status        MatchRequestStatus @default(PENDING)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  // Relations
+  league    League  @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  requester User    @relation("MatchRequestRequester", fields: [requesterId], references: [id])
+  opponent  User    @relation("MatchRequestOpponent", fields: [opponentId], references: [id])
+  match     Match?
+  notifications Notification[]
+
+  @@unique([leagueId, requesterId, opponentId])
+  @@map("match_requests")
+}
+
+model Notification {
+  id             String          @id @default(cuid())
+  userId         String
+  type           NotificationType
+  matchRequestId String?
+  matchId        String?
+  message        String
+  read           Boolean         @default(false)
+  createdAt      DateTime        @default(now())
+
+  // Relations
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  matchRequest MatchRequest? @relation(fields: [matchRequestId], references: [id], onDelete: Cascade)
+  match        Match?        @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@map("notifications")
+}
+
+model MatchChat {
+  id        String   @id @default(cuid())
+  matchId   String
+  senderId  String
+  message   String   @db.Text
+  createdAt DateTime @default(now())
+
+  // Relations
+  match  Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  sender User  @relation(fields: [senderId], references: [id])
+
+  @@index([matchId, createdAt])
+  @@map("match_chat")
 }

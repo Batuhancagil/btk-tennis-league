@@ -110,6 +110,28 @@ export async function PATCH(
 
     const data = await req.json()
 
+    // Handle startLeague action
+    if (data.action === "startLeague") {
+      if (league.status !== LeagueStatus.DRAFT) {
+        return NextResponse.json(
+          { error: "Only DRAFT leagues can be started" },
+          { status: 400 }
+        )
+      }
+
+      const updatedLeague = await prisma.league.update({
+        where: { id: params.id },
+        data: {
+          status: LeagueStatus.ACTIVE,
+        },
+        include: {
+          manager: true,
+        },
+      })
+
+      return NextResponse.json(updatedLeague)
+    }
+
     const updatedLeague = await prisma.league.update({
       where: { id: params.id },
       data: {
@@ -162,11 +184,21 @@ export async function DELETE(
       where: { leagueId: params.id },
     })
 
+    const data = await req.json()
+    const confirmation = data.confirmation
+
     if (matchesCount > 0) {
-      return NextResponse.json(
-        { error: "Bu ligin maçları bulunmaktadır. Maçları olan ligler silinemez." },
-        { status: 400 }
-      )
+      // Require confirmation to delete league with matches
+      if (confirmation !== "DELETE") {
+        return NextResponse.json(
+          { 
+            error: "Bu ligin maçları bulunmaktadır. Silmek için 'DELETE' yazmanız gerekmektedir.",
+            requiresConfirmation: true,
+            matchesCount,
+          },
+          { status: 400 }
+        )
+      }
     }
 
     // Delete the league (cascade will handle teams, leaguePlayers, etc.)

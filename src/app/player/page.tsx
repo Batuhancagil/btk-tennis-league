@@ -234,13 +234,22 @@ export default function PlayerDashboard() {
                 <div className="text-xl font-bold text-red-600">{matchStats.losses}</div>
               </div>
             </div>
-            <Link
-              href="/player/matches"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-tennis-gold text-tennis-black rounded-lg font-semibold hover:bg-tennis-gold/90 transition-colors"
-            >
-              Tüm maçları görüntüle
-              <span>→</span>
-            </Link>
+            <div className="flex gap-3">
+              <Link
+                href="/player/matches"
+                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-tennis-gold text-tennis-black rounded-lg font-semibold hover:bg-tennis-gold/90 transition-colors"
+              >
+                Tüm maçları görüntüle
+                <span>→</span>
+              </Link>
+              <Link
+                href="/player/match-requests"
+                className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-tennis-green text-white rounded-lg font-semibold hover:bg-tennis-green/90 transition-colors"
+              >
+                Maç İsteği Gönder
+                <span>+</span>
+              </Link>
+            </div>
           </div>
 
           {/* Invitations Card */}

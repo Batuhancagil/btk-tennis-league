@@ -92,11 +92,22 @@ export async function GET(req: NextRequest) {
             },
           },
         },
+        matchRequest: {
+          select: {
+            id: true,
+          },
+        },
       },
       orderBy: { scheduledDate: "desc" },
     })
 
-    return NextResponse.json(matches)
+    // Add matchRequestId to each match
+    const matchesWithRequestId = matches.map((match: any) => ({
+      ...match,
+      matchRequestId: match.matchRequest?.id || null,
+    }))
+
+    return NextResponse.json(matchesWithRequestId)
   } catch (error) {
     console.error("Error fetching matches:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
