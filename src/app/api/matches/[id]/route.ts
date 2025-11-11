@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { UserRole, MatchStatus } from "@prisma/client"
+import { UserRole, MatchStatus, ScoreStatus } from "@prisma/client"
+import { validateTennisScore, convertToHomeAway, calculateGames, type SetScore } from "@/lib/tennis-scoring"
 
 export async function GET(
   req: NextRequest,
@@ -53,6 +54,16 @@ export async function GET(
           include: {
             player: true,
             team: true,
+          },
+        },
+        scoreReports: {
+          include: {
+            reporter: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
         },
       },
@@ -134,19 +145,129 @@ export async function PATCH(
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
     }
 
-    // Captains/players can only update scores, managers can update everything
     const updateData: any = {}
-    if (isAuthorized) {
-      if (data.homeScore !== undefined) updateData.homeScore = data.homeScore
-      if (data.awayScore !== undefined) updateData.awayScore = data.awayScore
-      if (data.scheduledDate !== undefined) updateData.scheduledDate = data.scheduledDate ? new Date(data.scheduledDate) : null
-    }
+
+    // Handle manager actions: approve score, direct entry, or edit
     if (isManager) {
-      if (data.status) updateData.status = data.status as MatchStatus
-      if (data.status === MatchStatus.PLAYED && !match.approvedById) {
+      // Approve a specific score report
+      if (data.approveScoreReportId) {
+        const scoreReport = await prisma.matchScoreReport.findUnique({
+          where: { id: data.approveScoreReportId },
+        })
+
+        if (!scoreReport || scoreReport.matchId !== params.id) {
+          return NextResponse.json(
+            { error: "Score report not found" },
+            { status: 404 }
+          )
+        }
+
+        // Check if user is manager of this league
+        if (
+          match.league.managerId !== session.user.id &&
+          session.user.role !== UserRole.SUPERADMIN
+        ) {
+          return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
+        }
+
+        const setScores = scoreReport.setScores as SetScore[]
+        const reporterIsHome =
+          match.homePlayerId === scoreReport.reportedById ||
+          match.homeTeamId === scoreReport.reportedById
+
+        const { setsWonHome, setsWonAway, gamesWonHome, gamesWonAway } =
+          convertToHomeAway(setScores, reporterIsHome)
+
+        updateData.scoreStatus = ScoreStatus.APPROVED
+        updateData.finalScoreReportId = scoreReport.id
+        updateData.setsWonHome = setsWonHome
+        updateData.setsWonAway = setsWonAway
+        updateData.gamesWonHome = gamesWonHome
+        updateData.gamesWonAway = gamesWonAway
+        updateData.status = MatchStatus.PLAYED
         updateData.approvedById = session.user.id
         updateData.approvedAt = new Date()
       }
+      // Manager direct entry
+      else if (data.managerDirectEntry && data.sets) {
+        const setScores: SetScore[] = data.sets.map((set: any) => ({
+          reporter: parseInt(set.reporter),
+          opponent: parseInt(set.opponent),
+          tiebreak: set.tiebreak || false,
+          tiebreakScore: set.tiebreakScore
+            ? {
+                reporter: parseInt(set.tiebreakScore.reporter),
+                opponent: parseInt(set.tiebreakScore.opponent),
+              }
+            : undefined,
+          superTiebreak: set.superTiebreak || false,
+        })
+
+        const validation = validateTennisScore(setScores)
+        if (!validation.valid) {
+          return NextResponse.json({ error: validation.error }, { status: 400 })
+        }
+
+        // Determine home/away perspective (assume sets are from home perspective)
+        const { setsWonHome, setsWonAway, gamesWonHome, gamesWonAway } =
+          convertToHomeAway(setScores, true)
+
+        updateData.scoreStatus = ScoreStatus.MANAGER_ENTERED
+        updateData.setsWonHome = setsWonHome
+        updateData.setsWonAway = setsWonAway
+        updateData.gamesWonHome = gamesWonHome
+        updateData.gamesWonAway = gamesWonAway
+        updateData.status = MatchStatus.PLAYED
+        updateData.approvedById = session.user.id
+        updateData.approvedAt = new Date()
+      }
+      // Manager editing approved score
+      else if (
+        (match.scoreStatus === ScoreStatus.APPROVED ||
+          match.scoreStatus === ScoreStatus.MANAGER_ENTERED) &&
+        data.sets
+      ) {
+        const setScores: SetScore[] = data.sets.map((set: any) => ({
+          reporter: parseInt(set.reporter),
+          opponent: parseInt(set.opponent),
+          tiebreak: set.tiebreak || false,
+          tiebreakScore: set.tiebreakScore
+            ? {
+                reporter: parseInt(set.tiebreakScore.reporter),
+                opponent: parseInt(set.tiebreakScore.opponent),
+              }
+            : undefined,
+          superTiebreak: set.superTiebreak || false,
+        })
+
+        const validation = validateTennisScore(setScores)
+        if (!validation.valid) {
+          return NextResponse.json({ error: validation.error }, { status: 400 })
+        }
+
+        const { setsWonHome, setsWonAway, gamesWonHome, gamesWonAway } =
+          convertToHomeAway(setScores, true)
+
+        updateData.setsWonHome = setsWonHome
+        updateData.setsWonAway = setsWonAway
+        updateData.gamesWonHome = gamesWonHome
+        updateData.gamesWonAway = gamesWonAway
+        updateData.approvedAt = new Date()
+      }
+      // Regular updates (status, scheduledDate)
+      else {
+        if (data.status) updateData.status = data.status as MatchStatus
+        if (data.scheduledDate !== undefined)
+          updateData.scheduledDate = data.scheduledDate
+            ? new Date(data.scheduledDate)
+            : null
+      }
+    } else {
+      // Non-managers can only update scheduledDate
+      if (data.scheduledDate !== undefined)
+        updateData.scheduledDate = data.scheduledDate
+          ? new Date(data.scheduledDate)
+          : null
     }
 
     const updatedMatch = await prisma.match.update({
@@ -166,6 +287,16 @@ export async function PATCH(
           select: {
             id: true,
             name: true,
+          },
+        },
+        scoreReports: {
+          include: {
+            reporter: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
         },
       },

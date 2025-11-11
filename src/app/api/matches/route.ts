@@ -82,6 +82,16 @@ export async function GET(req: NextRequest) {
             },
           },
         },
+        scoreReports: {
+          include: {
+            reporter: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
       },
       orderBy: { scheduledDate: "desc" },
     })

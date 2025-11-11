@@ -1,9 +1,11 @@
 "use client"
 
 import { useSession } from "next-auth/react"
-import { useEffect, useState } from "react"
-import { LeagueType, LeagueStatus, TeamCategory, MatchType, LeagueFormat } from "@prisma/client"
+import { useEffect, useState, useCallback } from "react"
+import { LeagueType, LeagueStatus, TeamCategory, MatchType, LeagueFormat, ScoreStatus } from "@prisma/client"
 import Link from "next/link"
+import TennisScoreInput from "@/components/TennisScoreInput"
+import { formatTennisScore, type SetScore } from "@/lib/tennis-scoring"
 
 interface League {
   id: string
@@ -79,14 +81,37 @@ export default function ManagerDashboard() {
   const [selectedPlayersForLeague, setSelectedPlayersForLeague] = useState<{ [leagueId: string]: string[] }>({})
   const [searchQueryLeague, setSearchQueryLeague] = useState<{ [leagueId: string]: string }>({})
   const [dropdownOpenLeague, setDropdownOpenLeague] = useState<{ [leagueId: string]: boolean }>({})
+  const [activeTab, setActiveTab] = useState<"leagues" | "pending">("leagues")
+  const [pendingMatches, setPendingMatches] = useState<any[]>([])
+  const [loadingPending, setLoadingPending] = useState(false)
+  const [selectedMatchForScore, setSelectedMatchForScore] = useState<any | null>(null)
+  const [showScoreForm, setShowScoreForm] = useState(false)
+
+  const fetchPendingMatches = useCallback(async () => {
+    setLoadingPending(true)
+    try {
+      const res = await fetch("/api/matches/pending-approval")
+      if (res.ok) {
+        const data = await res.json()
+        setPendingMatches(data)
+      }
+    } catch (error) {
+      console.error("Error fetching pending matches:", error)
+    } finally {
+      setLoadingPending(false)
+    }
+  }, [])
 
   useEffect(() => {
     if (session?.user) {
       fetchLeagues()
       fetchTeams()
       fetchAllPlayers()
+      if (activeTab === "pending") {
+        fetchPendingMatches()
+      }
     }
-  }, [session])
+  }, [session, activeTab, fetchPendingMatches])
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -717,7 +742,206 @@ export default function ManagerDashboard() {
             <h1 className="text-4xl font-bold text-gray-900 mb-2">Lig Yöneticisi Paneli</h1>
             <p className="text-gray-600">Liglerinizi yönetin ve fikstür oluşturun</p>
           </div>
-          <div className="flex gap-3 flex-wrap">
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-4 mb-6 border-b border-gray-200">
+          <button
+            onClick={() => setActiveTab("leagues")}
+            className={`px-6 py-3 font-semibold transition-all ${
+              activeTab === "leagues"
+                ? "border-b-2 border-tennis-gold text-tennis-gold"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            Ligler
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab("pending")
+              fetchPendingMatches()
+            }}
+            className={`px-6 py-3 font-semibold transition-all relative ${
+              activeTab === "pending"
+                ? "border-b-2 border-tennis-gold text-tennis-gold"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            Onaylanmayı Bekleyen Maçlar
+            {pendingMatches.length > 0 && (
+              <span className="ml-2 px-2 py-1 bg-red-500 text-white text-xs rounded-full">
+                {pendingMatches.length}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {activeTab === "pending" && (
+          <div className="mb-8">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Onaylanmayı Bekleyen Maçlar</h2>
+                <p className="text-gray-600">Oyuncular tarafından bildirilen skorları onaylayın</p>
+              </div>
+            </div>
+
+            {loadingPending ? (
+              <div className="text-center py-8">Yükleniyor...</div>
+            ) : pendingMatches.length === 0 ? (
+              <div className="bg-white rounded-xl shadow-lg p-12 text-center border border-gray-200">
+                <div className="text-6xl mb-4">✅</div>
+                <p className="text-gray-600 text-lg">Onay bekleyen maç yok</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {pendingMatches.map((match) => {
+                  const homeReport = match.scoreReports?.find(
+                    (r: any) =>
+                      r.reportedById === match.homePlayerId ||
+                      r.reportedById === match.homeTeamId
+                  )
+                  const awayReport = match.scoreReports?.find(
+                    (r: any) =>
+                      r.reportedById === match.awayPlayerId ||
+                      r.reportedById === match.awayTeamId
+                  )
+
+                  return (
+                    <div key={match.id} className="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
+                      <div className="mb-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="text-lg font-semibold">{match.league.name}</h3>
+                          <span className="px-3 py-1 bg-orange-100 text-orange-800 rounded-full text-sm">
+                            Onay Bekliyor
+                          </span>
+                        </div>
+                        <p className="text-gray-700">
+                          {match.homePlayer?.name || match.homeTeam?.name || "Bilinmeyen"} vs{" "}
+                          {match.awayPlayer?.name || match.awayTeam?.name || "Bilinmeyen"}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {match.scheduledDate
+                            ? new Date(match.scheduledDate).toLocaleDateString("tr-TR")
+                            : "Tarih belirlenmedi"}
+                        </p>
+                      </div>
+
+                      <div className="grid md:grid-cols-2 gap-4 mb-4">
+                        {/* Home Player Report */}
+                        <div className={`p-4 rounded-lg border-2 ${
+                          homeReport ? "border-blue-200 bg-blue-50" : "border-gray-200 bg-gray-50"
+                        }`}>
+                          <h4 className="font-semibold mb-2">
+                            {match.homePlayer?.name || match.homeTeam?.name || "Home"} Bildirdiği Skor
+                          </h4>
+                          {homeReport ? (
+                            <div>
+                              <p className="text-lg font-bold mb-1">
+                                {formatTennisScore(homeReport.setScores as SetScore[])}
+                              </p>
+                              <p className="text-sm text-gray-600">
+                                {homeReport.setsWon} - {homeReport.setsLost} Set
+                              </p>
+                              <p className="text-xs text-gray-500 mt-1">
+                                {new Date(homeReport.createdAt).toLocaleString("tr-TR")}
+                              </p>
+                              <button
+                                onClick={async () => {
+                                  if (confirm("Bu skoru onaylamak istediğinize emin misiniz?")) {
+                                    const res = await fetch(`/api/matches/${match.id}/approve`, {
+                                      method: "POST",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ scoreReportId: homeReport.id }),
+                                    })
+                                    if (res.ok) {
+                                      fetchPendingMatches()
+                                      fetchLeagues()
+                                    } else {
+                                      const error = await res.json()
+                                      alert(error.error || "Onaylama başarısız")
+                                    }
+                                  }
+                                }}
+                                className="mt-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                              >
+                                Onayla
+                              </button>
+                            </div>
+                          ) : (
+                            <p className="text-gray-500 text-sm">Henüz skor bildirilmedi</p>
+                          )}
+                        </div>
+
+                        {/* Away Player Report */}
+                        <div className={`p-4 rounded-lg border-2 ${
+                          awayReport ? "border-blue-200 bg-blue-50" : "border-gray-200 bg-gray-50"
+                        }`}>
+                          <h4 className="font-semibold mb-2">
+                            {match.awayPlayer?.name || match.awayTeam?.name || "Away"} Bildirdiği Skor
+                          </h4>
+                          {awayReport ? (
+                            <div>
+                              <p className="text-lg font-bold mb-1">
+                                {formatTennisScore(awayReport.setScores as SetScore[])}
+                              </p>
+                              <p className="text-sm text-gray-600">
+                                {awayReport.setsWon} - {awayReport.setsLost} Set
+                              </p>
+                              <p className="text-xs text-gray-500 mt-1">
+                                {new Date(awayReport.createdAt).toLocaleString("tr-TR")}
+                              </p>
+                              <button
+                                onClick={async () => {
+                                  if (confirm("Bu skoru onaylamak istediğinize emin misiniz?")) {
+                                    const res = await fetch(`/api/matches/${match.id}/approve`, {
+                                      method: "POST",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ scoreReportId: awayReport.id }),
+                                    })
+                                    if (res.ok) {
+                                      fetchPendingMatches()
+                                      fetchLeagues()
+                                    } else {
+                                      const error = await res.json()
+                                      alert(error.error || "Onaylama başarısız")
+                                    }
+                                  }
+                                }}
+                                className="mt-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                              >
+                                Onayla
+                              </button>
+                            </div>
+                          ) : (
+                            <p className="text-gray-500 text-sm">Henüz skor bildirilmedi</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Manager Direct Entry */}
+                      <div className="mt-4 pt-4 border-t border-gray-200">
+                        <button
+                          onClick={() => {
+                            setSelectedMatchForScore(match)
+                            setShowScoreForm(true)
+                          }}
+                          className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+                        >
+                          Skor Gir (Manager)
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "leagues" && (
+          <div>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
+              <div className="flex gap-3 flex-wrap">
             {selectedLeagues.size > 0 && (
               <>
                 <button
@@ -1310,7 +1534,59 @@ export default function ManagerDashboard() {
               <p className="text-gray-600 text-lg">Henüz lig yok. Yeni lig oluşturun.</p>
             </div>
           )}
-        </div>
+          </div>
+        )}
+
+        {/* Manager Score Entry Modal */}
+        {showScoreForm && selectedMatchForScore && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <h2 className="text-2xl font-bold mb-4">Skor Gir (Manager)</h2>
+              <p className="text-gray-600 mb-4">
+                {selectedMatchForScore.league.name} -{" "}
+                {selectedMatchForScore.homePlayer?.name ||
+                  selectedMatchForScore.homeTeam?.name ||
+                  "Bilinmeyen"}{" "}
+                vs{" "}
+                {selectedMatchForScore.awayPlayer?.name ||
+                  selectedMatchForScore.awayTeam?.name ||
+                  "Bilinmeyen"}
+              </p>
+              <TennisScoreInput
+                onSubmit={async (sets: SetScore[]) => {
+                  try {
+                    const res = await fetch(`/api/matches/${selectedMatchForScore.id}`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        managerDirectEntry: true,
+                        sets,
+                      }),
+                    })
+
+                    if (res.ok) {
+                      setShowScoreForm(false)
+                      setSelectedMatchForScore(null)
+                      fetchPendingMatches()
+                      fetchLeagues()
+                      alert("Skor başarıyla girildi")
+                    } else {
+                      const error = await res.json()
+                      alert(error.error || "Skor girilirken hata oluştu")
+                    }
+                  } catch (error) {
+                    console.error("Error entering score:", error)
+                    alert("Skor girilirken hata oluştu")
+                  }
+                }}
+                onCancel={() => {
+                  setShowScoreForm(false)
+                  setSelectedMatchForScore(null)
+                }}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

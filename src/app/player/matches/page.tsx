@@ -4,7 +4,9 @@ import { useSession } from "next-auth/react"
 import { useEffect, useState, useCallback } from "react"
 import Navbar from "@/components/Navbar"
 import Link from "next/link"
-import { MatchStatus, MatchType, LeagueFormat } from "@prisma/client"
+import { MatchStatus, MatchType, LeagueFormat, ScoreStatus } from "@prisma/client"
+import TennisScoreInput from "@/components/TennisScoreInput"
+import { formatTennisScore, type SetScore } from "@/lib/tennis-scoring"
 
 interface Match {
   id: string
@@ -32,11 +34,30 @@ interface Match {
   matchType: MatchType
   scheduledDate: string | null
   status: MatchStatus
+  scoreStatus: ScoreStatus
   homeScore: number | null
   awayScore: number | null
+  setsWonHome: number | null
+  setsWonAway: number | null
+  gamesWonHome: number | null
+  gamesWonAway: number | null
   squads: Array<{
     teamId: string
     player: {
+      id: string
+      name: string
+    }
+  }>
+  scoreReports?: Array<{
+    id: string
+    reportedById: string
+    setsWon: number
+    setsLost: number
+    gamesWon: number
+    gamesLost: number
+    setScores: SetScore[]
+    createdAt: string
+    reporter: {
       id: string
       name: string
     }
@@ -47,6 +68,8 @@ export default function PlayerMatchesPage() {
   const { data: session } = useSession()
   const [matches, setMatches] = useState<Match[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedMatch, setSelectedMatch] = useState<Match | null>(null)
+  const [showScoreForm, setShowScoreForm] = useState(false)
   const [stats, setStats] = useState({
     totalMatches: 0,
     wins: 0,
@@ -75,27 +98,74 @@ export default function PlayerMatchesPage() {
     }
   }, [session?.user?.id])
 
+  const handleMarkAsPlayed = async (matchId: string) => {
+    try {
+      const res = await fetch(`/api/matches/${matchId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: MatchStatus.PLAYED }),
+      })
+      if (res.ok) {
+        fetchMatches()
+      } else {
+        const error = await res.json()
+        alert(error.error || "Hata oluştu")
+      }
+    } catch (error) {
+      console.error("Error marking match as played:", error)
+      alert("Hata oluştu")
+    }
+  }
+
+  const handleReportScore = async (sets: SetScore[]) => {
+    if (!selectedMatch) return
+
+    try {
+      const res = await fetch(`/api/matches/${selectedMatch.id}/report-score`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sets }),
+      })
+
+      if (res.ok) {
+        setShowScoreForm(false)
+        setSelectedMatch(null)
+        fetchMatches()
+        alert("Skor başarıyla bildirildi")
+      } else {
+        const error = await res.json()
+        alert(error.error || "Skor bildirilirken hata oluştu")
+      }
+    } catch (error) {
+      console.error("Error reporting score:", error)
+      alert("Skor bildirilirken hata oluştu")
+    }
+  }
+
   const calculateStats = useCallback(() => {
     const playedMatches = matches.filter(
-      (m) => m.status === MatchStatus.PLAYED && m.homeScore !== null && m.awayScore !== null
+      (m) =>
+        m.status === MatchStatus.PLAYED &&
+        (m.scoreStatus === ScoreStatus.APPROVED || m.scoreStatus === ScoreStatus.MANAGER_ENTERED) &&
+        m.setsWonHome !== null &&
+        m.setsWonAway !== null
     )
 
     let wins = 0
     let losses = 0
-    let draws = 0
 
     playedMatches.forEach((match) => {
-      let playerScore: number | null = null
-      let opponentScore: number | null = null
+      let playerSetsWon: number | null = null
+      let opponentSetsWon: number | null = null
 
       if (match.league.format === LeagueFormat.INDIVIDUAL) {
         // Individual league match
         if (match.homePlayer?.id === session?.user.id) {
-          playerScore = match.homeScore!
-          opponentScore = match.awayScore!
+          playerSetsWon = match.setsWonHome!
+          opponentSetsWon = match.setsWonAway!
         } else if (match.awayPlayer?.id === session?.user.id) {
-          playerScore = match.awayScore!
-          opponentScore = match.homeScore!
+          playerSetsWon = match.setsWonAway!
+          opponentSetsWon = match.setsWonHome!
         } else {
           return
         }
@@ -105,18 +175,16 @@ export default function PlayerMatchesPage() {
         if (!playerSquad || !match.homeTeam || !match.awayTeam) return
 
         const isHomeTeam = playerSquad.teamId === match.homeTeam.id
-        playerScore = isHomeTeam ? match.homeScore! : match.awayScore!
-        opponentScore = isHomeTeam ? match.awayScore! : match.homeScore!
+        playerSetsWon = isHomeTeam ? match.setsWonHome! : match.setsWonAway!
+        opponentSetsWon = isHomeTeam ? match.setsWonAway! : match.setsWonHome!
       }
 
-      if (playerScore === null || opponentScore === null) return
+      if (playerSetsWon === null || opponentSetsWon === null) return
 
-      if (playerScore > opponentScore) {
+      if (playerSetsWon > opponentSetsWon) {
         wins++
-      } else if (playerScore < opponentScore) {
-        losses++
       } else {
-        draws++
+        losses++
       }
     })
 
@@ -124,7 +192,7 @@ export default function PlayerMatchesPage() {
       totalMatches: playedMatches.length,
       wins,
       losses,
-      draws,
+      draws: 0, // No draws in tennis
     })
   }, [matches, session?.user?.id])
 
@@ -163,7 +231,7 @@ export default function PlayerMatchesPage() {
           </Link>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-4 mb-6">
+        <div className="grid gap-6 md:grid-cols-3 mb-6">
           <div className="bg-white rounded-lg shadow p-4">
             <h3 className="text-sm text-gray-500 mb-1">Toplam Maç</h3>
             <p className="text-2xl font-bold">{stats.totalMatches}</p>
@@ -171,10 +239,6 @@ export default function PlayerMatchesPage() {
           <div className="bg-white rounded-lg shadow p-4">
             <h3 className="text-sm text-gray-500 mb-1">Galibiyet</h3>
             <p className="text-2xl font-bold text-green-600">{stats.wins}</p>
-          </div>
-          <div className="bg-white rounded-lg shadow p-4">
-            <h3 className="text-sm text-gray-500 mb-1">Beraberlik</h3>
-            <p className="text-2xl font-bold text-yellow-600">{stats.draws}</p>
           </div>
           <div className="bg-white rounded-lg shadow p-4">
             <h3 className="text-sm text-gray-500 mb-1">Mağlubiyet</h3>
@@ -210,15 +274,26 @@ export default function PlayerMatchesPage() {
               opponentName = isHome ? match.awayTeam.name : match.homeTeam.name
             }
 
+            const myScoreReport = match.scoreReports?.find(
+              (r) => r.reportedById === session?.user.id
+            )
+            const opponentScoreReport = match.scoreReports?.find(
+              (r) => r.reportedById !== session?.user.id
+            )
+
             return (
               <div key={match.id} className="bg-white rounded-lg shadow p-6">
                 <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h2 className="text-xl font-semibold">{match.league.name}</h2>
-                    <p className="text-gray-600">
+                  <div className="flex-1">
+                    <div className="mb-2">
+                      <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-semibold">
+                        {match.league.name}
+                      </span>
+                    </div>
+                    <h2 className="text-xl font-semibold mt-2">
                       {match.homePlayer?.name || match.homeTeam?.name || "Bilinmeyen"} vs{" "}
                       {match.awayPlayer?.name || match.awayTeam?.name || "Bilinmeyen"}
-                    </p>
+                    </h2>
                     <p className="text-sm text-gray-500">
                       {match.matchType === MatchType.SINGLE ? "Single" : "Double"} -{" "}
                       {match.scheduledDate
@@ -226,49 +301,110 @@ export default function PlayerMatchesPage() {
                         : "Tarih belirlenmedi"}
                     </p>
                   </div>
-                  <span
-                    className={`px-2 py-1 rounded text-sm ${
-                      match.status === MatchStatus.PLAYED
-                        ? "bg-green-100 text-green-800"
+                  <div className="flex flex-col items-end gap-2">
+                    <span
+                      className={`px-2 py-1 rounded text-sm ${
+                        match.status === MatchStatus.PLAYED
+                          ? "bg-green-100 text-green-800"
+                          : match.status === MatchStatus.CANCELLED
+                          ? "bg-red-100 text-red-800"
+                          : "bg-yellow-100 text-yellow-800"
+                      }`}
+                    >
+                      {match.status === MatchStatus.PLAYED
+                        ? "Oynandı"
                         : match.status === MatchStatus.CANCELLED
-                        ? "bg-red-100 text-red-800"
-                        : "bg-yellow-100 text-yellow-800"
-                    }`}
-                  >
-                    {match.status === MatchStatus.PLAYED
-                      ? "Oynandı"
-                      : match.status === MatchStatus.CANCELLED
-                      ? "İptal"
-                      : "Planlandı"}
-                  </span>
+                        ? "İptal"
+                        : "Planlandı"}
+                    </span>
+                    {match.scoreStatus &&
+                      match.scoreStatus !== ScoreStatus.APPROVED &&
+                      match.scoreStatus !== ScoreStatus.MANAGER_ENTERED &&
+                      match.scoreStatus !== ScoreStatus.PENDING && (
+                        <span className="px-2 py-1 rounded text-sm bg-orange-100 text-orange-800">
+                          Onay Bekliyor
+                        </span>
+                      )}
+                  </div>
                 </div>
 
-                {match.status === MatchStatus.PLAYED && match.homeScore !== null && match.awayScore !== null && (
-                  <div className="mb-4">
-                    <p className="text-lg font-semibold">
-                      Skor: {match.homeScore} - {match.awayScore}
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      {isIndividual ? "Sizin skorunuz" : `Takımınız (${playerName})`}:{" "}
-                      {isHome ? match.homeScore : match.awayScore}
-                    </p>
-                    {isHome ? (
-                      match.homeScore > match.awayScore ? (
-                        <p className="text-green-600 font-medium">✓ Galibiyet</p>
-                      ) : match.homeScore < match.awayScore ? (
-                        <p className="text-red-600 font-medium">✗ Mağlubiyet</p>
+                {/* Approved Score Display */}
+                {(match.scoreStatus === ScoreStatus.APPROVED ||
+                  match.scoreStatus === ScoreStatus.MANAGER_ENTERED) &&
+                  match.setsWonHome !== null &&
+                  match.setsWonAway !== null && (
+                    <div className="mb-4 p-4 bg-gray-50 rounded">
+                      <p className="text-lg font-semibold mb-2">Maç Skoru</p>
+                      <p className="text-xl font-bold">
+                        {match.setsWonHome} - {match.setsWonAway} Set
+                      </p>
+                      {isHome ? (
+                        match.setsWonHome > match.setsWonAway ? (
+                          <p className="text-green-600 font-medium mt-2">✓ Galibiyet</p>
+                        ) : (
+                          <p className="text-red-600 font-medium mt-2">✗ Mağlubiyet</p>
+                        )
+                      ) : match.setsWonAway > match.setsWonHome ? (
+                        <p className="text-green-600 font-medium mt-2">✓ Galibiyet</p>
                       ) : (
-                        <p className="text-yellow-600 font-medium">= Beraberlik</p>
-                      )
-                    ) : match.awayScore > match.homeScore ? (
-                      <p className="text-green-600 font-medium">✓ Galibiyet</p>
-                    ) : match.awayScore < match.homeScore ? (
-                      <p className="text-red-600 font-medium">✗ Mağlubiyet</p>
-                    ) : (
-                      <p className="text-yellow-600 font-medium">= Beraberlik</p>
+                        <p className="text-red-600 font-medium mt-2">✗ Mağlubiyet</p>
+                      )}
+                    </div>
+                  )}
+
+                {/* Score Reports Display */}
+                {match.scoreReports && match.scoreReports.length > 0 && (
+                  <div className="mb-4 p-4 bg-gray-50 rounded">
+                    <p className="font-semibold mb-2">Bildirilen Skorlar</p>
+                    {myScoreReport && (
+                      <div className="mb-2">
+                        <p className="text-sm text-gray-600">
+                          <strong>Sizin bildirdiğiniz:</strong>{" "}
+                          {formatTennisScore(myScoreReport.setScores as SetScore[])}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(myScoreReport.createdAt).toLocaleString("tr-TR")}
+                        </p>
+                      </div>
+                    )}
+                    {opponentScoreReport && (
+                      <div>
+                        <p className="text-sm text-gray-600">
+                          <strong>Rakibin bildirdiği:</strong>{" "}
+                          {formatTennisScore(opponentScoreReport.setScores as SetScore[])}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(opponentScoreReport.createdAt).toLocaleString("tr-TR")}
+                        </p>
+                      </div>
                     )}
                   </div>
                 )}
+
+                {/* Actions */}
+                <div className="flex gap-2 mt-4">
+                  {match.status === MatchStatus.SCHEDULED && (
+                    <button
+                      onClick={() => handleMarkAsPlayed(match.id)}
+                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                    >
+                      Maç Bitti
+                    </button>
+                  )}
+                  {match.status === MatchStatus.PLAYED &&
+                    match.scoreStatus !== ScoreStatus.APPROVED &&
+                    match.scoreStatus !== ScoreStatus.MANAGER_ENTERED && (
+                      <button
+                        onClick={() => {
+                          setSelectedMatch(match)
+                          setShowScoreForm(true)
+                        }}
+                        className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                      >
+                        {myScoreReport ? "Skoru Güncelle" : "Skor Bildir"}
+                      </button>
+                    )}
+                </div>
               </div>
             )
           })}
@@ -279,6 +415,37 @@ export default function PlayerMatchesPage() {
             </div>
           )}
         </div>
+
+        {/* Score Reporting Modal */}
+        {showScoreForm && selectedMatch && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <h2 className="text-2xl font-bold mb-4">Skor Bildir</h2>
+              <p className="text-gray-600 mb-4">
+                {selectedMatch.league.name} -{" "}
+                {selectedMatch.homePlayer?.name ||
+                  selectedMatch.homeTeam?.name ||
+                  "Bilinmeyen"}{" "}
+                vs{" "}
+                {selectedMatch.awayPlayer?.name ||
+                  selectedMatch.awayTeam?.name ||
+                  "Bilinmeyen"}
+              </p>
+              <TennisScoreInput
+                onSubmit={handleReportScore}
+                onCancel={() => {
+                  setShowScoreForm(false)
+                  setSelectedMatch(null)
+                }}
+                initialSets={
+                  selectedMatch.scoreReports?.find(
+                    (r) => r.reportedById === session?.user.id
+                  )?.setScores as SetScore[] | undefined
+                }
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

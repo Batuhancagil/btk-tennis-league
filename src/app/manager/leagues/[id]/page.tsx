@@ -5,7 +5,8 @@ import { useEffect, useState, useCallback } from "react"
 import { useParams } from "next/navigation"
 import Navbar from "@/components/Navbar"
 import Link from "next/link"
-import { MatchStatus, MatchType, LeagueFormat } from "@prisma/client"
+import { MatchStatus, MatchType, LeagueFormat, ScoreStatus } from "@prisma/client"
+import { formatTennisScore, type SetScore } from "@/lib/tennis-scoring"
 
 interface Match {
   id: string
@@ -28,8 +29,13 @@ interface Match {
   matchType: MatchType
   scheduledDate: string | null
   status: MatchStatus
+  scoreStatus: ScoreStatus
   homeScore: number | null
   awayScore: number | null
+  setsWonHome: number | null
+  setsWonAway: number | null
+  gamesWonHome: number | null
+  gamesWonAway: number | null
   approvedBy: {
     id: string
     name: string
@@ -40,16 +46,17 @@ interface Match {
 }
 
 interface LeagueTableEntry {
-  teamId: string
-  teamName: string
+  id: string // teamId or playerId
+  name: string // teamName or playerName
   played: number
   won: number
-  drawn: number
   lost: number
-  goalsFor: number
-  goalsAgainst: number
-  goalDifference: number
-  points: number
+  setsWon: number
+  setsLost: number
+  gamesWon: number
+  gamesLost: number
+  setAverage: number
+  gameAverage: number
 }
 
 export default function LeagueDetailPage() {
@@ -118,72 +125,125 @@ export default function LeagueDetailPage() {
   const calculateTable = useCallback(() => {
     if (!league) return
 
-    // Only calculate table for doubles leagues (team-based)
-    if (league.format === LeagueFormat.INDIVIDUAL) {
-      setTable([])
-      return
-    }
-
     const tableMap = new Map<string, LeagueTableEntry>()
 
-    // Initialize table entries for all teams
-    league.teams.forEach((team: any) => {
-      tableMap.set(team.id, {
-        teamId: team.id,
-        teamName: team.name,
-        played: 0,
-        won: 0,
-        drawn: 0,
-        lost: 0,
-        goalsFor: 0,
-        goalsAgainst: 0,
-        goalDifference: 0,
-        points: 0,
+    // Initialize table entries
+    if (league.format === LeagueFormat.DOUBLES) {
+      // Team-based league
+      league.teams.forEach((team: any) => {
+        tableMap.set(team.id, {
+          id: team.id,
+          name: team.name,
+          played: 0,
+          won: 0,
+          lost: 0,
+          setsWon: 0,
+          setsLost: 0,
+          gamesWon: 0,
+          gamesLost: 0,
+          setAverage: 0,
+          gameAverage: 0,
+        })
       })
-    })
+    } else {
+      // Individual league
+      league.leaguePlayers?.forEach((lp: any) => {
+        tableMap.set(lp.playerId, {
+          id: lp.playerId,
+          name: lp.player.name,
+          played: 0,
+          won: 0,
+          lost: 0,
+          setsWon: 0,
+          setsLost: 0,
+          gamesWon: 0,
+          gamesLost: 0,
+          setAverage: 0,
+          gameAverage: 0,
+        })
+      })
+    }
 
-    // Calculate stats from played matches
-    matches
-      .filter((m) => m.status === MatchStatus.PLAYED && m.homeScore !== null && m.awayScore !== null && m.homeTeam && m.awayTeam)
-      .forEach((match) => {
-        const homeEntry = tableMap.get(match.homeTeam!.id)
-        const awayEntry = tableMap.get(match.awayTeam!.id)
+    // Calculate stats from approved matches only
+    const approvedMatches = matches.filter(
+      (m) =>
+        m.status === MatchStatus.PLAYED &&
+        (m.scoreStatus === ScoreStatus.APPROVED || m.scoreStatus === ScoreStatus.MANAGER_ENTERED) &&
+        m.setsWonHome !== null &&
+        m.setsWonAway !== null
+    )
+
+    approvedMatches.forEach((match) => {
+      if (league.format === LeagueFormat.DOUBLES) {
+        // Team-based match
+        if (!match.homeTeam || !match.awayTeam) return
+
+        const homeEntry = tableMap.get(match.homeTeam.id)
+        const awayEntry = tableMap.get(match.awayTeam.id)
 
         if (!homeEntry || !awayEntry) return
 
         homeEntry.played++
         awayEntry.played++
-        homeEntry.goalsFor += match.homeScore!
-        homeEntry.goalsAgainst += match.awayScore!
-        awayEntry.goalsFor += match.awayScore!
-        awayEntry.goalsAgainst += match.homeScore!
+        homeEntry.setsWon += match.setsWonHome!
+        homeEntry.setsLost += match.setsWonAway!
+        awayEntry.setsWon += match.setsWonAway!
+        awayEntry.setsLost += match.setsWonHome!
 
-        if (match.homeScore! > match.awayScore!) {
+        homeEntry.gamesWon += match.gamesWonHome || 0
+        homeEntry.gamesLost += match.gamesWonAway || 0
+        awayEntry.gamesWon += match.gamesWonAway || 0
+        awayEntry.gamesLost += match.gamesWonHome || 0
+
+        if (match.setsWonHome! > match.setsWonAway!) {
           homeEntry.won++
-          homeEntry.points += 3
           awayEntry.lost++
-        } else if (match.homeScore! < match.awayScore!) {
-          awayEntry.won++
-          awayEntry.points += 3
-          homeEntry.lost++
         } else {
-          homeEntry.drawn++
-          awayEntry.drawn++
-          homeEntry.points += 1
-          awayEntry.points += 1
+          awayEntry.won++
+          homeEntry.lost++
         }
-      })
+      } else {
+        // Individual match
+        if (!match.homePlayer || !match.awayPlayer) return
 
-    // Calculate goal difference
-    tableMap.forEach((entry) => {
-      entry.goalDifference = entry.goalsFor - entry.goalsAgainst
+        const homeEntry = tableMap.get(match.homePlayer.id)
+        const awayEntry = tableMap.get(match.awayPlayer.id)
+
+        if (!homeEntry || !awayEntry) return
+
+        homeEntry.played++
+        awayEntry.played++
+        homeEntry.setsWon += match.setsWonHome!
+        homeEntry.setsLost += match.setsWonAway!
+        awayEntry.setsWon += match.setsWonAway!
+        awayEntry.setsLost += match.setsWonHome!
+
+        homeEntry.gamesWon += match.gamesWonHome || 0
+        homeEntry.gamesLost += match.gamesWonAway || 0
+        awayEntry.gamesWon += match.gamesWonAway || 0
+        awayEntry.gamesLost += match.gamesWonHome || 0
+
+        if (match.setsWonHome! > match.setsWonAway!) {
+          homeEntry.won++
+          awayEntry.lost++
+        } else {
+          awayEntry.won++
+          homeEntry.lost++
+        }
+      }
     })
 
-    // Sort by points, then goal difference, then goals for
+    // Calculate averages
+    tableMap.forEach((entry) => {
+      entry.setAverage = entry.setsLost > 0 ? entry.setsWon / entry.setsLost : entry.setsWon
+      entry.gameAverage = entry.gamesLost > 0 ? entry.gamesWon / entry.gamesLost : entry.gamesWon
+    })
+
+    // Sort by: Wins (desc), Set Average (desc), Game Average (desc)
     const sortedTable = Array.from(tableMap.values()).sort((a, b) => {
-      if (b.points !== a.points) return b.points - a.points
-      if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference
-      return b.goalsFor - a.goalsFor
+      if (b.won !== a.won) return b.won - a.won
+      if (b.setAverage !== a.setAverage) return b.setAverage - a.setAverage
+      return b.gameAverage - a.gameAverage
     })
 
     setTable(sortedTable)
@@ -574,61 +634,79 @@ export default function LeagueDetailPage() {
                         #
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                        Takım
+                        {league?.format === LeagueFormat.DOUBLES ? "Takım" : "İsim"}
                       </th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                        O
+                        Maç Sayısı
                       </th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                        G
+                        Galibiyet
                       </th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                        B
+                        Mağlubiyet
                       </th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                        M
+                        Kazandığı Set
                       </th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                        A
+                        Kaybettiği Set
                       </th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                        P
+                        Kazandığı Oyun
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                        Kaybettiği Oyun
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                        Set Averajı
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                        Oyun Averajı
                       </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
                     {table.map((entry, index) => (
-                      <tr key={entry.teamId}>
+                      <tr key={entry.id}>
                         <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
                           {index + 1}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
-                          {entry.teamName}
+                          {entry.name}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
                           {entry.played}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-center text-green-600 font-semibold">
                           {entry.won}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
-                          {entry.drawn}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-center text-red-600 font-semibold">
                           {entry.lost}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
-                          {entry.goalsFor}:{entry.goalsAgainst}
+                          {entry.setsWon}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-center">
-                          {entry.points}
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
+                          {entry.setsLost}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
+                          {entry.gamesWon}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
+                          {entry.gamesLost}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold">
+                          {entry.setAverage.toFixed(2)}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-center font-semibold">
+                          {entry.gameAverage.toFixed(2)}
                         </td>
                       </tr>
                     ))}
                     {table.length === 0 && (
                       <tr>
-                        <td colSpan={8} className="px-4 py-3 text-center text-sm text-gray-500">
-                          Henüz takım yok
+                        <td colSpan={11} className="px-4 py-3 text-center text-sm text-gray-500">
+                          {league?.format === LeagueFormat.DOUBLES ? "Henüz takım yok" : "Henüz oyuncu yok"}
                         </td>
                       </tr>
                     )}
@@ -641,21 +719,37 @@ export default function LeagueDetailPage() {
               <h2 className="text-2xl font-semibold mb-4">Maçlar</h2>
             <div className="space-y-2">
               {matches.map((match) => {
-                // This section is for doubles league matches only
-                if (!match.homeTeam || !match.awayTeam) return null
+                // Show matches based on league format
+                if (league.format === LeagueFormat.DOUBLES && (!match.homeTeam || !match.awayTeam)) return null
+                if (league.format === LeagueFormat.INDIVIDUAL && (!match.homePlayer || !match.awayPlayer)) return null
 
                 return (
                   <div key={match.id} className="bg-white rounded-lg shadow p-4">
                     <div className="flex justify-between items-start mb-2">
                       <div className="flex-1">
                         <p className="font-medium">
-                          {match.homeTeam.name} vs {match.awayTeam.name}
+                          {match.homePlayer?.name || match.homeTeam?.name || "Bilinmeyen"} vs{" "}
+                          {match.awayPlayer?.name || match.awayTeam?.name || "Bilinmeyen"}
                         </p>
-                      {match.status === MatchStatus.PLAYED && match.homeScore !== null && match.awayScore !== null && (
-                        <p className="text-lg font-semibold">
-                          {match.homeScore} - {match.awayScore}
-                        </p>
-                      )}
+                      {(match.scoreStatus === ScoreStatus.APPROVED ||
+                        match.scoreStatus === ScoreStatus.MANAGER_ENTERED) &&
+                        match.setsWonHome !== null &&
+                        match.setsWonAway !== null && (
+                          <p className="text-lg font-semibold">
+                            {match.setsWonHome} - {match.setsWonAway} Set
+                            {match.gamesWonHome !== null && match.gamesWonAway !== null && (
+                              <span className="text-sm text-gray-600 ml-2">
+                                ({match.gamesWonHome} - {match.gamesWonAway} Oyun)
+                              </span>
+                            )}
+                          </p>
+                        )}
+                      {match.scoreStatus &&
+                        match.scoreStatus !== ScoreStatus.APPROVED &&
+                        match.scoreStatus !== ScoreStatus.MANAGER_ENTERED &&
+                        match.scoreStatus !== ScoreStatus.PENDING && (
+                          <p className="text-sm text-orange-600">Onay Bekliyor</p>
+                        )}
                       <p className="text-sm text-gray-500">
                         {match.matchType === MatchType.SINGLE ? "Single" : "Double"}
                       </p>

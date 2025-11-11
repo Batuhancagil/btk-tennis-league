@@ -77,6 +77,15 @@ enum LeagueFormat {
   INDIVIDUAL
 }
 
+enum ScoreStatus {
+  PENDING
+  REPORTED_BY_HOME
+  REPORTED_BY_AWAY
+  REPORTED_BY_BOTH
+  APPROVED
+  MANAGER_ENTERED
+}
+
 model User {
   id            String       @id @default(cuid())
   email         String       @unique
@@ -99,10 +108,11 @@ model User {
   managerLeagues  League[]       @relation("LeagueManager")
   invitations     Invitation[]
   matchSquads     MatchSquad[]
-  approvedMatches Match[]        @relation("MatchApprover")
+  approvedMatches Match[]            @relation("MatchApprover")
   leaguePlayers   LeaguePlayer[]
-  homeMatches     Match[]        @relation("HomePlayer")
-  awayMatches     Match[]        @relation("AwayPlayer")
+  homeMatches     Match[]            @relation("HomePlayer")
+  awayMatches     Match[]            @relation("AwayPlayer")
+  scoreReports    MatchScoreReport[]
 
   @@map("users")
 }
@@ -190,31 +200,38 @@ model League {
 }
 
 model Match {
-  id            String       @id @default(cuid())
-  leagueId      String
-  homeTeamId    String?
-  awayTeamId    String?
-  homePlayerId  String?
-  awayPlayerId  String?
-  category      TeamCategory
-  matchType     MatchType
-  scheduledDate DateTime?
-  status        MatchStatus  @default(SCHEDULED)
-  homeScore     Int?
-  awayScore     Int?
-  approvedById  String?
-  approvedAt    DateTime?
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  id                String       @id @default(cuid())
+  leagueId          String
+  homeTeamId        String?
+  awayTeamId        String?
+  homePlayerId      String?
+  awayPlayerId      String?
+  category          TeamCategory
+  matchType         MatchType
+  scheduledDate     DateTime?
+  status            MatchStatus  @default(SCHEDULED)
+  homeScore         Int?
+  awayScore         Int?
+  approvedById      String?
+  approvedAt        DateTime?
+  scoreStatus       ScoreStatus  @default(PENDING)
+  setsWonHome       Int?
+  setsWonAway        Int?
+  gamesWonHome       Int?
+  gamesWonAway       Int?
+  finalScoreReportId String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
   // Relations
-  league     League       @relation(fields: [leagueId], references: [id])
-  homeTeam   Team?        @relation("HomeTeam", fields: [homeTeamId], references: [id])
-  awayTeam   Team?        @relation("AwayTeam", fields: [awayTeamId], references: [id])
-  homePlayer User?        @relation("HomePlayer", fields: [homePlayerId], references: [id])
-  awayPlayer User?        @relation("AwayPlayer", fields: [awayPlayerId], references: [id])
-  approvedBy User?        @relation("MatchApprover", fields: [approvedById], references: [id])
-  squads     MatchSquad[]
+  league            League            @relation(fields: [leagueId], references: [id])
+  homeTeam          Team?             @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam          Team?             @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  homePlayer        User?             @relation("HomePlayer", fields: [homePlayerId], references: [id])
+  awayPlayer        User?             @relation("AwayPlayer", fields: [awayPlayerId], references: [id])
+  approvedBy        User?             @relation("MatchApprover", fields: [approvedById], references: [id])
+  squads            MatchSquad[]
+  scoreReports      MatchScoreReport[]
 
   @@map("matches")
 }
@@ -278,4 +295,23 @@ model LeaguePlayer {
 
   @@unique([leagueId, playerId])
   @@map("league_players")
+}
+
+model MatchScoreReport {
+  id            String   @id @default(cuid())
+  matchId       String
+  reportedById  String
+  setsWon       Int
+  setsLost      Int
+  gamesWon       Int
+  gamesLost      Int
+  setScores     Json     // Array of set scores from reporter's perspective
+  createdAt     DateTime @default(now())
+
+  // Relations
+  match    Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  reporter User  @relation(fields: [reportedById], references: [id])
+
+  @@unique([matchId, reportedById])
+  @@map("match_score_reports")
 }
