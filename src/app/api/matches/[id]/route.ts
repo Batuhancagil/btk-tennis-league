@@ -201,7 +201,7 @@ export async function PATCH(
               }
             : undefined,
           superTiebreak: set.superTiebreak || false,
-        })
+        }))
 
         const validation = validateTennisScore(setScores)
         if (!validation.valid) {
@@ -238,7 +238,7 @@ export async function PATCH(
               }
             : undefined,
           superTiebreak: set.superTiebreak || false,
-        })
+        }))
 
         const validation = validateTennisScore(setScores)
         if (!validation.valid) {
