@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useSession } from "next-auth/react"
 
 interface ChatMessage {
@@ -29,6 +29,18 @@ export default function MatchChat({ matchId }: MatchChatProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
+  const fetchMessages = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/matches/${matchId}/chat`)
+      if (res.ok) {
+        const data = await res.json()
+        setMessages(data)
+      }
+    } catch (error) {
+      console.error("Error fetching messages:", error)
+    }
+  }, [matchId])
+
   useEffect(() => {
     fetchMessages()
 
@@ -42,7 +54,7 @@ export default function MatchChat({ matchId }: MatchChatProps) {
         clearInterval(pollIntervalRef.current)
       }
     }
-  }, [matchId])
+  }, [matchId, fetchMessages])
 
   useEffect(() => {
     scrollToBottom()
@@ -50,18 +62,6 @@ export default function MatchChat({ matchId }: MatchChatProps) {
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }
-
-  const fetchMessages = async () => {
-    try {
-      const res = await fetch(`/api/matches/${matchId}/chat`)
-      if (res.ok) {
-        const data = await res.json()
-        setMessages(data)
-      }
-    } catch (error) {
-      console.error("Error fetching messages:", error)
-    }
   }
 
   const handleSend = async (e: React.FormEvent) => {

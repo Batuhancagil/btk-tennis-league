@@ -1,7 +1,7 @@
 "use client"
 
 import { useSession } from "next-auth/react"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import Navbar from "@/components/Navbar"
 import MatchRequestForm from "@/components/MatchRequestForm"
 import { MatchRequestStatus } from "@prisma/client"
@@ -46,13 +46,7 @@ export default function MatchRequestsPage() {
   const [processingId, setProcessingId] = useState<string | null>(null)
   const [showRequestForm, setShowRequestForm] = useState(false)
 
-  useEffect(() => {
-    if (session?.user) {
-      fetchMatchRequests()
-    }
-  }, [session, filter])
-
-  const fetchMatchRequests = async () => {
+  const fetchMatchRequests = useCallback(async () => {
     try {
       setLoading(true)
       const type = filter === "all" ? null : filter
@@ -67,7 +61,13 @@ export default function MatchRequestsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [filter])
+
+  useEffect(() => {
+    if (session?.user) {
+      fetchMatchRequests()
+    }
+  }, [session, fetchMatchRequests])
 
   const handleAccept = async (requestId: string) => {
     try {

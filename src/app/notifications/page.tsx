@@ -290,7 +290,7 @@ export default function NotificationsPage() {
                       </p>
                       {notif.matchRequest.message && (
                         <p className="text-gray-600 mb-2 italic">
-                          "{notif.matchRequest.message}"
+                          &quot;{notif.matchRequest.message}&quot;
                         </p>
                       )}
                       {notif.matchRequest.suggestedDate && (

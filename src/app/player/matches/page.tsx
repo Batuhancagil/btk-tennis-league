@@ -424,7 +424,7 @@ export default function PlayerMatchesPage() {
                 {/* Chat Section */}
                 {expandedChatMatchId === match.id && match.matchRequestId && (
                   <div className="mt-4 border-t border-gray-200 pt-4">
-                    <h3 className="text-lg font-semibold mb-3">Maç Chat'i</h3>
+                    <h3 className="text-lg font-semibold mb-3">Maç Chat&apos;i</h3>
                     <div className="h-96">
                       <MatchChat matchId={match.id} />
                     </div>
