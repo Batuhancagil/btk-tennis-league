@@ -68,7 +68,7 @@ export async function POST(
       )
     }
 
-    const setScores = scoreReport.setScores as SetScore[]
+    const setScores = scoreReport.setScores as unknown as SetScore[]
     const reporterIsHome =
       match.homePlayerId === scoreReport.reportedById ||
       match.homeTeamId === scoreReport.reportedById

@@ -104,6 +104,7 @@ export async function PATCH(
         league: {
           select: {
             format: true,
+            managerId: true,
           },
         },
       },
@@ -170,7 +171,7 @@ export async function PATCH(
           return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
         }
 
-        const setScores = scoreReport.setScores as SetScore[]
+        const setScores = scoreReport.setScores as unknown as SetScore[]
         const reporterIsHome =
           match.homePlayerId === scoreReport.reportedById ||
           match.homeTeamId === scoreReport.reportedById

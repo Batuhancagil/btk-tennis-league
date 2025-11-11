@@ -1535,6 +1535,7 @@ export default function ManagerDashboard() {
             </div>
           )}
           </div>
+          </div>
         )}
 
         {/* Manager Score Entry Modal */}
