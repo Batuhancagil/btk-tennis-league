@@ -72,6 +72,11 @@ enum InvitationStatus {
   REJECTED
 }
 
+enum LeagueFormat {
+  DOUBLES
+  INDIVIDUAL
+}
+
 model User {
   id            String      @id @default(cuid())
   email         String      @unique
@@ -95,6 +100,7 @@ model User {
   invitations     Invitation[]
   matchSquads     MatchSquad[]
   approvedMatches Match[]      @relation("MatchApprover")
+  leaguePlayers   LeaguePlayer[]
 
   @@map("users")
 }
@@ -139,13 +145,14 @@ model VerificationToken {
 }
 
 model Team {
-  id        String       @id @default(cuid())
-  name      String
-  captainId String
-  leagueId  String?
-  category  TeamCategory
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  id         String       @id @default(cuid())
+  name       String
+  captainId  String
+  leagueId   String?
+  category   TeamCategory
+  maxPlayers Int?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
 
   // Relations
   captain     User         @relation("TeamCaptain", fields: [captainId], references: [id])
@@ -163,6 +170,7 @@ model League {
   id        String       @id @default(cuid())
   name      String
   type      LeagueType
+  format    LeagueFormat @default(DOUBLES)
   category  TeamCategory
   season    String
   status    LeagueStatus @default(DRAFT)
@@ -171,9 +179,10 @@ model League {
   updatedAt DateTime     @updatedAt
 
   // Relations
-  manager User    @relation("LeagueManager", fields: [managerId], references: [id])
-  teams   Team[]
-  matches Match[]
+  manager      User          @relation("LeagueManager", fields: [managerId], references: [id])
+  teams        Team[]
+  matches      Match[]
+  leaguePlayers LeaguePlayer[]
 
   @@map("leagues")
 }
@@ -249,4 +258,18 @@ model Invitation {
 
   @@unique([teamId, playerId])
   @@map("invitations")
+}
+
+model LeaguePlayer {
+  id       String   @id @default(cuid())
+  leagueId String
+  playerId String
+  joinedAt DateTime @default(now())
+
+  // Relations
+  league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  player User   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([leagueId, playerId])
+  @@map("league_players")
 }

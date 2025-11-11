@@ -155,6 +155,18 @@ export async function POST(req: NextRequest) {
           continue
         }
 
+        // Check maxPlayers limit
+        if (team.maxPlayers !== null) {
+          const currentPlayerCount = await prisma.teamPlayer.count({
+            where: { teamId },
+          })
+          
+          if (currentPlayerCount >= team.maxPlayers) {
+            errors.push(`Takım maksimum oyuncu sayısına ulaştı (${team.maxPlayers}): ${pid}`)
+            continue
+          }
+        }
+
         // Check if invitation already exists
         const existingInvitation = await prisma.invitation.findUnique({
           where: {

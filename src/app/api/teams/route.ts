@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
     }
 
-    const { name, category, leagueId } = await req.json()
+    const { name, category, leagueId, maxPlayers } = await req.json()
 
     if (!name || !category) {
       return NextResponse.json({ error: "Missing name or category" }, { status: 400 })
@@ -82,12 +82,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid category" }, { status: 400 })
     }
 
+    // Validate maxPlayers if provided
+    let maxPlayersValue: number | null = null
+    if (maxPlayers !== undefined && maxPlayers !== null) {
+      const parsed = parseInt(maxPlayers)
+      if (isNaN(parsed) || parsed < 1) {
+        return NextResponse.json({ error: "maxPlayers must be a positive number" }, { status: 400 })
+      }
+      maxPlayersValue = parsed
+    }
+
     const team = await prisma.team.create({
       data: {
         name,
         category: category as TeamCategory,
         captainId: session.user.id,
         leagueId: leagueId || null,
+        maxPlayers: maxPlayersValue,
       },
       include: {
         captain: {

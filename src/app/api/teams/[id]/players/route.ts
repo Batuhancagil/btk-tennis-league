@@ -73,6 +73,20 @@ export async function POST(
       return NextResponse.json({ error: "Player already in team" }, { status: 400 })
     }
 
+    // Check maxPlayers limit
+    if (team.maxPlayers !== null) {
+      const currentPlayerCount = await prisma.teamPlayer.count({
+        where: { teamId: params.id },
+      })
+      
+      if (currentPlayerCount >= team.maxPlayers) {
+        return NextResponse.json(
+          { error: `Takım maksimum oyuncu sayısına ulaştı (${team.maxPlayers})` },
+          { status: 400 }
+        )
+      }
+    }
+
     const teamPlayer = await prisma.teamPlayer.create({
       data: {
         teamId: params.id,
@@ -89,6 +103,26 @@ export async function POST(
         },
       },
     })
+
+    // Check if team is now full and withdraw pending invitations
+    if (team.maxPlayers !== null) {
+      const newPlayerCount = await prisma.teamPlayer.count({
+        where: { teamId: params.id },
+      })
+      
+      if (newPlayerCount >= team.maxPlayers) {
+        // Withdraw all pending invitations for this team
+        await prisma.invitation.updateMany({
+          where: {
+            teamId: params.id,
+            status: "PENDING",
+          },
+          data: {
+            status: "REJECTED",
+          },
+        })
+      }
+    }
 
     return NextResponse.json(teamPlayer)
   } catch (error: any) {

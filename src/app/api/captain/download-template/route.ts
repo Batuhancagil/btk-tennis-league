@@ -23,10 +23,12 @@ export async function GET(req: NextRequest) {
       {
         "Takım Adı": "Erkek Takımı 1",
         "Kategori": "MALE",
+        "Maksimum Oyuncu": 10,
       },
       {
         "Takım Adı": "Kadın Takımı 1",
         "Kategori": "FEMALE",
+        "Maksimum Oyuncu": 12,
       },
     ]
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { UserRole, LeagueType, LeagueStatus, TeamCategory } from "@prisma/client"
+import { UserRole, LeagueType, LeagueStatus, TeamCategory, LeagueFormat } from "@prisma/client"
 
 export async function GET(req: NextRequest) {
   try {
@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
     }
 
-    const { name, type, category, season } = await req.json()
+    const { name, type, category, season, format } = await req.json()
 
     if (!name || !type || !category || !season) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
@@ -91,10 +91,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid category" }, { status: 400 })
     }
 
+    // Validate format if provided, otherwise default to DOUBLES
+    let leagueFormat = LeagueFormat.DOUBLES
+    if (format) {
+      if (!Object.values(LeagueFormat).includes(format)) {
+        return NextResponse.json({ error: "Invalid league format" }, { status: 400 })
+      }
+      leagueFormat = format as LeagueFormat
+    }
+
     const league = await prisma.league.create({
       data: {
         name,
         type: type as LeagueType,
+        format: leagueFormat,
         category: category as TeamCategory,
         season,
         managerId: session.user.id,

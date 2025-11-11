@@ -51,6 +51,20 @@ export async function GET(
           },
           orderBy: { scheduledDate: "asc" },
         },
+        leaguePlayers: {
+          include: {
+            player: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                gender: true,
+                level: true,
+              },
+            },
+          },
+          orderBy: { joinedAt: "desc" },
+        },
       },
     })
 

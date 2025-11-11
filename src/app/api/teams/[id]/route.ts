@@ -81,7 +81,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
     }
 
-    const { name, category } = await req.json()
+    const { name, category, maxPlayers } = await req.json()
 
     const updateData: any = {}
     if (name !== undefined) updateData.name = name
@@ -90,6 +90,27 @@ export async function PATCH(
         return NextResponse.json({ error: "Invalid category" }, { status: 400 })
       }
       updateData.category = category as TeamCategory
+    }
+    if (maxPlayers !== undefined) {
+      if (maxPlayers === null) {
+        updateData.maxPlayers = null
+      } else {
+        const parsed = parseInt(maxPlayers)
+        if (isNaN(parsed) || parsed < 1) {
+          return NextResponse.json({ error: "maxPlayers must be a positive number" }, { status: 400 })
+        }
+        // Check if reducing maxPlayers would remove current players
+        const currentPlayerCount = await prisma.teamPlayer.count({
+          where: { teamId: params.id },
+        })
+        if (parsed < currentPlayerCount) {
+          return NextResponse.json(
+            { error: `maxPlayers cannot be less than current player count (${currentPlayerCount})` },
+            { status: 400 }
+          )
+        }
+        updateData.maxPlayers = parsed
+      }
     }
 
     const updatedTeam = await prisma.team.update({

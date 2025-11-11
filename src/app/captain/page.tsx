@@ -39,9 +39,11 @@ export default function CaptainDashboard() {
   const [showCreateTeam, setShowCreateTeam] = useState(false)
   const [newTeamName, setNewTeamName] = useState("")
   const [newTeamCategory, setNewTeamCategory] = useState<TeamCategory>(TeamCategory.MALE)
+  const [newTeamMaxPlayers, setNewTeamMaxPlayers] = useState<number | null>(null)
   const [editingTeam, setEditingTeam] = useState<Team | null>(null)
   const [editTeamName, setEditTeamName] = useState("")
   const [editTeamCategory, setEditTeamCategory] = useState<TeamCategory>(TeamCategory.MALE)
+  const [editTeamMaxPlayers, setEditTeamMaxPlayers] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [showExcelUpload, setShowExcelUpload] = useState(false)
   const [uploadingExcel, setUploadingExcel] = useState(false)
@@ -100,11 +102,13 @@ export default function CaptainDashboard() {
         body: JSON.stringify({
           name: newTeamName,
           category: newTeamCategory,
+          maxPlayers: newTeamMaxPlayers,
         }),
       })
       if (res.ok) {
         setShowCreateTeam(false)
         setNewTeamName("")
+        setNewTeamMaxPlayers(null)
         fetchTeams()
       }
     } catch (error) {
@@ -216,6 +220,7 @@ export default function CaptainDashboard() {
       setEditingTeam(data)
       setEditTeamName(data.name)
       setEditTeamCategory(data.category)
+      setEditTeamMaxPlayers(data.maxPlayers || null)
     } catch (error) {
       console.error("Error fetching team:", error)
       alert("Takım bilgileri yüklenirken hata oluştu")
@@ -233,6 +238,7 @@ export default function CaptainDashboard() {
         body: JSON.stringify({
           name: editTeamName,
           category: editTeamCategory,
+          maxPlayers: editTeamMaxPlayers,
         }),
       })
       if (res.ok) {
@@ -434,27 +440,40 @@ export default function CaptainDashboard() {
           <div className="bg-white rounded-lg shadow p-6 mb-6">
             <h2 className="text-xl font-semibold mb-4">Yeni Takım Oluştur</h2>
             <form onSubmit={handleCreateTeam} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">Takım Adı</label>
-                <input
-                  type="text"
-                  value={newTeamName}
-                  onChange={(e) => setNewTeamName(e.target.value)}
-                  className="w-full border rounded px-3 py-2"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Kategori</label>
-                <select
-                  value={newTeamCategory}
-                  onChange={(e) => setNewTeamCategory(e.target.value as TeamCategory)}
-                  className="w-full border rounded px-3 py-2"
-                >
-                  <option value={TeamCategory.MALE}>Erkek</option>
-                  <option value={TeamCategory.FEMALE}>Kadın</option>
-                  <option value={TeamCategory.MIXED}>Mix</option>
-                </select>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Takım Adı</label>
+                  <input
+                    type="text"
+                    value={newTeamName}
+                    onChange={(e) => setNewTeamName(e.target.value)}
+                    className="w-full border rounded px-3 py-2"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Kategori</label>
+                  <select
+                    value={newTeamCategory}
+                    onChange={(e) => setNewTeamCategory(e.target.value as TeamCategory)}
+                    className="w-full border rounded px-3 py-2"
+                  >
+                    <option value={TeamCategory.MALE}>Erkek</option>
+                    <option value={TeamCategory.FEMALE}>Kadın</option>
+                    <option value={TeamCategory.MIXED}>Mix</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Maksimum Oyuncu Sayısı</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={newTeamMaxPlayers || ""}
+                    onChange={(e) => setNewTeamMaxPlayers(e.target.value ? parseInt(e.target.value) : null)}
+                    placeholder="Sınırsız"
+                    className="w-full border rounded px-3 py-2"
+                  />
+                </div>
               </div>
               <div className="flex gap-2">
                 <button
@@ -479,7 +498,7 @@ export default function CaptainDashboard() {
           <div className="bg-white rounded-lg shadow-lg p-6 mb-6 border-2 border-blue-200">
             <h2 className="text-xl font-semibold mb-4">Takımı Düzenle</h2>
             <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium mb-2">Takım Adı</label>
                   <input
@@ -501,6 +520,17 @@ export default function CaptainDashboard() {
                     <option value={TeamCategory.FEMALE}>Kadın</option>
                     <option value={TeamCategory.MIXED}>Mix</option>
                   </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Maksimum Oyuncu Sayısı</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={editTeamMaxPlayers || ""}
+                    onChange={(e) => setEditTeamMaxPlayers(e.target.value ? parseInt(e.target.value) : null)}
+                    placeholder="Sınırsız"
+                    className="w-full border rounded px-3 py-2"
+                  />
                 </div>
               </div>
               

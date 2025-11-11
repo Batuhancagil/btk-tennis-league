@@ -23,12 +23,14 @@ export async function GET(req: NextRequest) {
       {
         "Lig Adı": "2024-2025 Erkek Takım İçi Ligi",
         "Lig Tipi": "INTRA_TEAM",
+        "Format": "DOUBLES",
         "Kategori": "MALE",
         "Sezon": "2024-2025",
       },
       {
-        "Lig Adı": "2024-2025 Kadın Kulüp Ligi",
+        "Lig Adı": "2024-2025 Kadın Bireysel Ligi",
         "Lig Tipi": "CLUB",
+        "Format": "INDIVIDUAL",
         "Kategori": "FEMALE",
         "Sezon": "2024-2025",
       },

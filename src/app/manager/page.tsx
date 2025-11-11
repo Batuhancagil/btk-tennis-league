@@ -2,7 +2,7 @@
 
 import { useSession } from "next-auth/react"
 import { useEffect, useState } from "react"
-import { LeagueType, LeagueStatus, TeamCategory, MatchType } from "@prisma/client"
+import { LeagueType, LeagueStatus, TeamCategory, MatchType, LeagueFormat } from "@prisma/client"
 import Link from "next/link"
 
 interface League {
@@ -51,11 +51,13 @@ export default function ManagerDashboard() {
   const [showCreateLeague, setShowCreateLeague] = useState(false)
   const [newLeagueName, setNewLeagueName] = useState("")
   const [newLeagueType, setNewLeagueType] = useState<LeagueType>(LeagueType.INTRA_TEAM)
+  const [newLeagueFormat, setNewLeagueFormat] = useState<LeagueFormat>(LeagueFormat.DOUBLES)
   const [newLeagueCategory, setNewLeagueCategory] = useState<TeamCategory>(TeamCategory.MALE)
   const [newLeagueSeason, setNewLeagueSeason] = useState("")
   const [editingTeam, setEditingTeam] = useState<Team | null>(null)
   const [editTeamName, setEditTeamName] = useState("")
   const [editTeamCategory, setEditTeamCategory] = useState<TeamCategory>(TeamCategory.MALE)
+  const [editTeamMaxPlayers, setEditTeamMaxPlayers] = useState<number | null>(null)
   const [teamPlayers, setTeamPlayers] = useState<any[]>([])
   const [allPlayers, setAllPlayers] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
@@ -109,6 +111,7 @@ export default function ManagerDashboard() {
       setEditingTeam(data)
       setEditTeamName(data.name)
       setEditTeamCategory(data.category)
+      setEditTeamMaxPlayers(data.maxPlayers || null)
       setTeamPlayers(data.players || [])
     } catch (error) {
       console.error("Error fetching team:", error)
@@ -127,6 +130,7 @@ export default function ManagerDashboard() {
         body: JSON.stringify({
           name: editTeamName,
           category: editTeamCategory,
+          maxPlayers: editTeamMaxPlayers,
         }),
       })
       if (res.ok) {
@@ -197,6 +201,7 @@ export default function ManagerDashboard() {
         body: JSON.stringify({
           name: newLeagueName,
           type: newLeagueType,
+          format: newLeagueFormat,
           category: newLeagueCategory,
           season: newLeagueSeason,
         }),
@@ -205,6 +210,7 @@ export default function ManagerDashboard() {
         setShowCreateLeague(false)
         setNewLeagueName("")
         setNewLeagueSeason("")
+        setNewLeagueFormat(LeagueFormat.DOUBLES)
         fetchLeagues()
       }
     } catch (error) {
@@ -416,7 +422,7 @@ export default function ManagerDashboard() {
           <div className="bg-white rounded-xl shadow-lg p-6 mb-6 border-2 border-blue-200">
             <h2 className="text-2xl font-bold text-gray-900 mb-6">Takımı Düzenle</h2>
             <div className="space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Takım Adı</label>
                   <input
@@ -438,6 +444,17 @@ export default function ManagerDashboard() {
                     <option value={TeamCategory.FEMALE}>Kadın</option>
                     <option value={TeamCategory.MIXED}>Mix</option>
                   </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Maksimum Oyuncu Sayısı</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={editTeamMaxPlayers || ""}
+                    onChange={(e) => setEditTeamMaxPlayers(e.target.value ? parseInt(e.target.value) : null)}
+                    placeholder="Sınırsız"
+                    className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-tennis-gold focus:border-tennis-gold transition-all"
+                  />
                 </div>
               </div>
               
@@ -533,16 +550,29 @@ export default function ManagerDashboard() {
                   required
                 />
               </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Lig Tipi</label>
-                <select
-                  value={newLeagueType}
-                  onChange={(e) => setNewLeagueType(e.target.value as LeagueType)}
-                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-tennis-gold focus:border-tennis-gold transition-all"
-                >
-                  <option value={LeagueType.INTRA_TEAM}>Takım İçi</option>
-                  <option value={LeagueType.CLUB}>Kulüp Ligi</option>
-                </select>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Lig Tipi</label>
+                  <select
+                    value={newLeagueType}
+                    onChange={(e) => setNewLeagueType(e.target.value as LeagueType)}
+                    className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-tennis-gold focus:border-tennis-gold transition-all"
+                  >
+                    <option value={LeagueType.INTRA_TEAM}>Takım İçi</option>
+                    <option value={LeagueType.CLUB}>Kulüp Ligi</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Format</label>
+                  <select
+                    value={newLeagueFormat}
+                    onChange={(e) => setNewLeagueFormat(e.target.value as LeagueFormat)}
+                    className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-tennis-gold focus:border-tennis-gold transition-all"
+                  >
+                    <option value={LeagueFormat.DOUBLES}>Çiftler Ligi</option>
+                    <option value={LeagueFormat.INDIVIDUAL}>Bireysel Lig</option>
+                  </select>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Kategori</label>
@@ -595,6 +625,9 @@ export default function ManagerDashboard() {
                   <div className="flex flex-wrap gap-2 items-center mb-2">
                     <span className="px-3 py-1 bg-tennis-green/10 text-tennis-green rounded-lg text-sm font-semibold">
                       {league.type === LeagueType.INTRA_TEAM ? "Takım İçi" : "Kulüp Ligi"}
+                    </span>
+                    <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-lg text-sm font-semibold">
+                      {league.format === LeagueFormat.DOUBLES ? "Çiftler" : "Bireysel"}
                     </span>
                     <span className="px-3 py-1 bg-tennis-gold/10 text-tennis-gold rounded-lg text-sm font-semibold">
                       {league.category === TeamCategory.MALE

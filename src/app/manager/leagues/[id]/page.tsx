@@ -5,7 +5,7 @@ import { useEffect, useState, useCallback } from "react"
 import { useParams } from "next/navigation"
 import Navbar from "@/components/Navbar"
 import Link from "next/link"
-import { MatchStatus, MatchType } from "@prisma/client"
+import { MatchStatus, MatchType, LeagueFormat } from "@prisma/client"
 
 interface Match {
   id: string
@@ -50,16 +50,43 @@ export default function LeagueDetailPage() {
   const [table, setTable] = useState<LeagueTableEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<MatchStatus | "ALL">("ALL")
+  const [showExcelUpload, setShowExcelUpload] = useState(false)
+  const [uploadingExcel, setUploadingExcel] = useState(false)
+  const [leaguePlayers, setLeaguePlayers] = useState<any[]>([])
+  const [allPlayers, setAllPlayers] = useState<any[]>([])
 
   const fetchLeague = useCallback(async () => {
     try {
       const res = await fetch(`/api/leagues/${leagueId}`)
       const data = await res.json()
       setLeague(data)
+      if (data.leaguePlayers) {
+        setLeaguePlayers(data.leaguePlayers)
+      }
     } catch (error) {
       console.error("Error fetching league:", error)
     } finally {
       setLoading(false)
+    }
+  }, [leagueId])
+
+  const fetchAllPlayers = useCallback(async () => {
+    try {
+      const res = await fetch("/api/users?status=APPROVED")
+      const data = await res.json()
+      setAllPlayers(data)
+    } catch (error) {
+      console.error("Error fetching players:", error)
+    }
+  }, [])
+
+  const fetchLeaguePlayers = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/leagues/${leagueId}/players`)
+      const data = await res.json()
+      setLeaguePlayers(data)
+    } catch (error) {
+      console.error("Error fetching league players:", error)
     }
   }, [leagueId])
 
@@ -144,8 +171,9 @@ export default function LeagueDetailPage() {
     if (session?.user && leagueId) {
       fetchLeague()
       fetchMatches()
+      fetchAllPlayers()
     }
-  }, [session, leagueId, filter, fetchLeague, fetchMatches])
+  }, [session, leagueId, filter, fetchLeague, fetchMatches, fetchAllPlayers])
 
   useEffect(() => {
     if (matches.length > 0 && league) {
@@ -166,6 +194,116 @@ export default function LeagueDetailPage() {
       }
     } catch (error) {
       console.error("Error approving match:", error)
+      alert("Hata oluştu")
+    }
+  }
+
+  const handleDownloadTemplate = async () => {
+    try {
+      const res = await fetch(`/api/manager/leagues/${leagueId}/download-template`)
+      if (!res.ok) {
+        throw new Error("Template indirme başarısız")
+      }
+
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = league?.format === LeagueFormat.DOUBLES ? "takim-template.xlsx" : "oyuncu-template.xlsx"
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+    } catch (error) {
+      console.error("Error downloading template:", error)
+      alert("Template indirme sırasında bir hata oluştu")
+    }
+  }
+
+  const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploadingExcel(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+
+      const endpoint = league?.format === LeagueFormat.DOUBLES 
+        ? `/api/manager/leagues/${leagueId}/upload-teams`
+        : `/api/manager/leagues/${leagueId}/upload-players`
+
+      const res = await fetch(endpoint, {
+        method: "POST",
+        body: formData,
+      })
+
+      const data = await res.json()
+      if (res.ok) {
+        let message = `Başarıyla yüklendi!\nEklenen: ${data.created}`
+        if (data.errors && data.errors.length > 0) {
+          message += `\nHatalı satır sayısı: ${data.errors.length}`
+          if (data.errors.length <= 10) {
+            message += `\n\nHatalar:\n${data.errors.join("\n")}`
+          } else {
+            message += `\n\nİlk 10 hata:\n${data.errors.slice(0, 10).join("\n")}\n... ve ${data.errors.length - 10} hata daha`
+            console.error("Tüm hatalar:", data.errors)
+          }
+        }
+        alert(message)
+        setShowExcelUpload(false)
+        await fetchLeague()
+        if (league?.format === LeagueFormat.INDIVIDUAL) {
+          await fetchLeaguePlayers()
+        }
+      } else {
+        alert(data.error || "Yükleme başarısız")
+      }
+    } catch (error) {
+      console.error("Error uploading Excel:", error)
+      alert("Yükleme sırasında bir hata oluştu")
+    } finally {
+      setUploadingExcel(false)
+      e.target.value = ""
+    }
+  }
+
+  const handleAddPlayerToLeague = async (playerId: string) => {
+    try {
+      const res = await fetch(`/api/leagues/${leagueId}/players`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerId }),
+      })
+      if (res.ok) {
+        await fetchLeaguePlayers()
+        await fetchLeague()
+      } else {
+        const error = await res.json()
+        alert(error.error || "Hata oluştu")
+      }
+    } catch (error) {
+      console.error("Error adding player:", error)
+      alert("Hata oluştu")
+    }
+  }
+
+  const handleRemovePlayerFromLeague = async (playerId: string) => {
+    if (!confirm("Oyuncuyu ligden çıkarmak istediğinize emin misiniz?")) return
+
+    try {
+      const res = await fetch(`/api/leagues/${leagueId}/players?playerId=${playerId}`, {
+        method: "DELETE",
+      })
+      if (res.ok) {
+        await fetchLeaguePlayers()
+        await fetchLeague()
+      } else {
+        const error = await res.json()
+        alert(error.error || "Hata oluştu")
+      }
+    } catch (error) {
+      console.error("Error removing player:", error)
       alert("Hata oluştu")
     }
   }
@@ -198,14 +336,54 @@ export default function LeagueDetailPage() {
           <div>
             <h1 className="text-3xl font-bold">{league.name}</h1>
             <p className="text-gray-600">{league.season}</p>
+            <p className="text-sm text-gray-500">
+              Format: {league.format === LeagueFormat.DOUBLES ? "Çiftler Ligi" : "Bireysel Lig"}
+            </p>
           </div>
-          <Link
-            href="/manager"
-            className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
-          >
-            Geri
-          </Link>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowExcelUpload(!showExcelUpload)}
+              className="px-4 py-2 bg-purple-500 text-white rounded hover:bg-purple-600"
+            >
+              {showExcelUpload ? "İptal" : "📊 Excel ile Yükle"}
+            </button>
+            <Link
+              href="/manager"
+              className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
+            >
+              Geri
+            </Link>
+          </div>
         </div>
+
+        {showExcelUpload && (
+          <div className="bg-white rounded-lg shadow p-4 mb-6">
+            <h2 className="text-lg font-semibold mb-4">
+              Excel ile {league.format === LeagueFormat.DOUBLES ? "Takım" : "Oyuncu"} Yükle
+            </h2>
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">
+                {league.format === LeagueFormat.DOUBLES 
+                  ? "Excel dosyası formatı: Takım Adı, Kategori, Maksimum Oyuncu"
+                  : "Excel dosyası formatı: Email veya Oyuncu"}
+              </p>
+              <button
+                onClick={handleDownloadTemplate}
+                className="px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600 text-sm mb-3"
+              >
+                📥 Template İndir
+              </button>
+            </div>
+            <input
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleExcelUpload}
+              disabled={uploadingExcel}
+              className="mb-4"
+            />
+            {uploadingExcel && <p className="text-blue-600">Yükleniyor...</p>}
+          </div>
+        )}
 
         <div className="mb-4 flex gap-2">
           <button
@@ -262,75 +440,83 @@ export default function LeagueDetailPage() {
           </div>
         )}
 
-        <div className="grid gap-6 md:grid-cols-2">
-          <div>
-            <h2 className="text-2xl font-semibold mb-4">Lig Tablosu</h2>
-            <div className="bg-white rounded-lg shadow overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      #
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Takım
-                    </th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                      O
-                    </th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                      G
-                    </th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                      B
-                    </th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                      M
-                    </th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                      A
-                    </th>
-                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
-                      P
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {table.map((entry, index) => (
-                    <tr key={entry.teamId}>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
-                        {index + 1}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
-                        {entry.teamName}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
-                        {entry.played}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
-                        {entry.won}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
-                        {entry.drawn}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
-                        {entry.lost}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
-                        {entry.goalsFor}:{entry.goalsAgainst}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-center">
-                        {entry.points}
-                      </td>
+        {league.format === LeagueFormat.DOUBLES ? (
+          <div className="grid gap-6 md:grid-cols-2">
+            <div>
+              <h2 className="text-2xl font-semibold mb-4">Lig Tablosu</h2>
+              <div className="bg-white rounded-lg shadow overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        #
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                        Takım
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                        O
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                        G
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                        B
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                        M
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                        A
+                      </th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">
+                        P
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {table.map((entry, index) => (
+                      <tr key={entry.teamId}>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
+                          {index + 1}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
+                          {entry.teamName}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
+                          {entry.played}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
+                          {entry.won}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
+                          {entry.drawn}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
+                          {entry.lost}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm text-center">
+                          {entry.goalsFor}:{entry.goalsAgainst}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-center">
+                          {entry.points}
+                        </td>
+                      </tr>
+                    ))}
+                    {table.length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="px-4 py-3 text-center text-sm text-gray-500">
+                          Henüz takım yok
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
 
-          <div>
-            <h2 className="text-2xl font-semibold mb-4">Maçlar</h2>
+            <div>
+              <h2 className="text-2xl font-semibold mb-4">Maçlar</h2>
             <div className="space-y-2">
               {matches.map((match) => (
                 <div key={match.id} className="bg-white rounded-lg shadow p-4">
@@ -382,8 +568,125 @@ export default function LeagueDetailPage() {
                 </div>
               )}
             </div>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2">
+            <div>
+              <h2 className="text-2xl font-semibold mb-4">Lig Oyuncuları</h2>
+              <div className="bg-white rounded-lg shadow p-4 mb-4">
+                <div className="mb-4">
+                  <label className="block text-sm font-medium mb-2">Oyuncu Ekle</label>
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        handleAddPlayerToLeague(e.target.value)
+                        e.target.value = ""
+                      }
+                    }}
+                    className="w-full border rounded px-3 py-2"
+                  >
+                    <option value="">Oyuncu Seç</option>
+                    {allPlayers
+                      .filter((player) => {
+                        // Filter players based on league category
+                        if (league.category === "MALE" && player.gender !== "MALE") {
+                          return false
+                        }
+                        if (league.category === "FEMALE" && player.gender !== "FEMALE") {
+                          return false
+                        }
+                        // Check if player is already in league
+                        return !leaguePlayers.some((lp: any) => lp.player.id === player.id)
+                      })
+                      .map((player) => (
+                        <option key={player.id} value={player.id}>
+                          {player.name} ({player.level || "Seviye yok"})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  {leaguePlayers.length > 0 ? (
+                    leaguePlayers.map((lp: any) => (
+                      <div
+                        key={lp.id}
+                        className="flex items-center justify-between p-2 bg-gray-50 rounded"
+                      >
+                        <span className="text-sm">
+                          {lp.player.name} ({lp.player.level || "Seviye yok"})
+                        </span>
+                        <button
+                          onClick={() => handleRemovePlayerFromLeague(lp.player.id)}
+                          className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600"
+                        >
+                          Çıkar
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-gray-500 text-sm">Henüz oyuncu yok</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h2 className="text-2xl font-semibold mb-4">Maçlar</h2>
+              <div className="space-y-2">
+                {matches.map((match) => (
+                  <div key={match.id} className="bg-white rounded-lg shadow p-4">
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex-1">
+                        <p className="font-medium">
+                          {match.homeTeam.name} vs {match.awayTeam.name}
+                        </p>
+                        {match.status === MatchStatus.PLAYED && match.homeScore !== null && match.awayScore !== null && (
+                          <p className="text-lg font-semibold">
+                            {match.homeScore} - {match.awayScore}
+                          </p>
+                        )}
+                        <p className="text-sm text-gray-500">
+                          {match.matchType === MatchType.SINGLE ? "Single" : "Double"}
+                        </p>
+                        {match.scheduledDate && (
+                          <p className="text-sm text-gray-500">
+                            {new Date(match.scheduledDate).toLocaleDateString("tr-TR")}
+                          </p>
+                        )}
+                      </div>
+                      <span
+                        className={`px-2 py-1 rounded text-xs ${
+                          match.status === MatchStatus.PLAYED
+                            ? "bg-green-100 text-green-800"
+                            : match.status === MatchStatus.CANCELLED
+                            ? "bg-red-100 text-red-800"
+                            : "bg-yellow-100 text-yellow-800"
+                        }`}
+                      >
+                        {match.status === MatchStatus.PLAYED
+                          ? "Oynandı"
+                          : match.status === MatchStatus.CANCELLED
+                          ? "İptal"
+                          : "Planlandı"}
+                      </span>
+                    </div>
+                    {match.approvedBy && (
+                      <p className="text-xs text-gray-500">
+                        Onaylayan: {match.approvedBy.name}
+                      </p>
+                    )}
+                  </div>
+                ))}
+                {matches.length === 0 && (
+                  <div className="bg-white rounded-lg shadow p-4 text-center">
+                    <p className="text-gray-500">Henüz maç yok</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

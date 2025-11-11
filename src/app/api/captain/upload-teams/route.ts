@@ -88,6 +88,8 @@ export async function POST(req: NextRequest) {
           headers['name'] = C
         } else if (headerNormalized === 'kategori' || headerNormalized === 'category' || headerText.toLowerCase() === 'category') {
           headers['category'] = C
+        } else if (headerNormalized === 'maksimum oyuncu' || headerNormalized === 'max oyuncu' || headerNormalized === 'maxplayers' || headerNormalized === 'max players') {
+          headers['maxPlayers'] = C
         }
       }
     }
@@ -108,6 +110,13 @@ export async function POST(req: NextRequest) {
         const cell = worksheet[cellAddress]
         if (cell) {
           row.category = cell.w ? String(cell.w) : (cell.v ? String(cell.v) : '')
+        }
+      }
+      if (headers['maxPlayers'] !== undefined) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: headers['maxPlayers'] })
+        const cell = worksheet[cellAddress]
+        if (cell) {
+          row.maxPlayers = cell.v !== undefined ? cell.v : (cell.w ? parseInt(cell.w) : null)
         }
       }
       
@@ -144,10 +153,20 @@ export async function POST(req: NextRequest) {
           continue
         }
 
+        // Parse maxPlayers
+        let maxPlayersValue: number | null = null
+        if (row.maxPlayers !== undefined && row.maxPlayers !== null) {
+          const parsed = parseInt(String(row.maxPlayers))
+          if (!isNaN(parsed) && parsed > 0) {
+            maxPlayersValue = parsed
+          }
+        }
+
         const team = await prisma.team.create({
           data: {
             name,
             category,
+            maxPlayers: maxPlayersValue,
             captainId: session.user.id,
           },
         })

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { UserRole } from "@prisma/client"
+import { UserRole, LeagueFormat } from "@prisma/client"
 
 export async function POST(
   req: NextRequest,
@@ -51,6 +51,14 @@ export async function POST(
     if (team.category !== league.category) {
       return NextResponse.json(
         { error: "Team category does not match league category" },
+        { status: 400 }
+      )
+    }
+
+    // Only doubles leagues can have teams
+    if (league.format !== LeagueFormat.DOUBLES) {
+      return NextResponse.json(
+        { error: "Teams can only be added to doubles leagues" },
         { status: 400 }
       )
     }

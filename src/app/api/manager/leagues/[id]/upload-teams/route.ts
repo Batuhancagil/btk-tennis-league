@@ -2,9 +2,12 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { UserRole, LeagueType, LeagueStatus, TeamCategory, LeagueFormat } from "@prisma/client"
+import { UserRole, LeagueFormat, TeamCategory } from "@prisma/client"
 
-export async function POST(req: NextRequest) {
+export async function POST(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
   try {
     const session = await getServerSession(authOptions)
 
@@ -14,6 +17,25 @@ export async function POST(req: NextRequest) {
 
     if (session.user.role !== UserRole.MANAGER && session.user.role !== UserRole.SUPERADMIN) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
+    }
+
+    const league = await prisma.league.findUnique({
+      where: { id: params.id },
+    })
+
+    if (!league) {
+      return NextResponse.json({ error: "League not found" }, { status: 404 })
+    }
+
+    if (league.managerId !== session.user.id && session.user.role !== UserRole.SUPERADMIN) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
+    }
+
+    if (league.format !== LeagueFormat.DOUBLES) {
+      return NextResponse.json(
+        { error: "Teams can only be uploaded to doubles leagues" },
+        { status: 400 }
+      )
     }
 
     const formData = await req.formData()
@@ -26,23 +48,19 @@ export async function POST(req: NextRequest) {
     // Dynamically import xlsx
     const XLSX = await import("xlsx")
     
-    // Check if file is CSV
     const fileName = file.name.toLowerCase()
     const isCSV = fileName.endsWith('.csv')
     
     let workbook: any
     
     if (isCSV) {
-      // For CSV files, read as UTF-8 text to preserve Turkish characters
       const arrayBuffer = await file.arrayBuffer()
       let text = new TextDecoder('utf-8').decode(arrayBuffer)
       
-      // Remove BOM (Byte Order Mark) if present
       if (text.charCodeAt(0) === 0xFEFF) {
         text = text.slice(1)
       }
       
-      // Detect delimiter
       const firstLine = text.split('\n')[0]
       let delimiter = ','
       if (firstLine.includes(';')) delimiter = ';'
@@ -55,7 +73,6 @@ export async function POST(req: NextRequest) {
         FS: delimiter,
       })
     } else {
-      // For Excel files
       const arrayBuffer = await file.arrayBuffer()
       workbook = XLSX.read(arrayBuffer, { 
         type: "array",
@@ -84,16 +101,12 @@ export async function POST(req: NextRequest) {
           .replace(/ö/g, 'o')
           .replace(/ç/g, 'c')
         
-        if (headerNormalized === 'lig adı' || headerNormalized === 'lig adi' || headerNormalized === 'name' || headerText.toLowerCase() === 'name') {
+        if (headerNormalized === 'takım adı' || headerNormalized === 'takim adi' || headerNormalized === 'name' || headerText.toLowerCase() === 'name') {
           headers['name'] = C
-        } else if (headerNormalized === 'lig tipi' || headerNormalized === 'type' || headerText.toLowerCase() === 'type') {
-          headers['type'] = C
-        } else if (headerNormalized === 'format' || headerText.toLowerCase() === 'format') {
-          headers['format'] = C
         } else if (headerNormalized === 'kategori' || headerNormalized === 'category' || headerText.toLowerCase() === 'category') {
           headers['category'] = C
-        } else if (headerNormalized === 'sezon' || headerNormalized === 'season' || headerText.toLowerCase() === 'season') {
-          headers['season'] = C
+        } else if (headerNormalized === 'maksimum oyuncu' || headerNormalized === 'max oyuncu' || headerNormalized === 'maxplayers' || headerNormalized === 'max players') {
+          headers['maxPlayers'] = C
         }
       }
     }
@@ -109,13 +122,6 @@ export async function POST(req: NextRequest) {
           row.name = cell.w ? String(cell.w) : (cell.v ? String(cell.v) : '')
         }
       }
-      if (headers['type'] !== undefined) {
-        const cellAddress = XLSX.utils.encode_cell({ r: R, c: headers['type'] })
-        const cell = worksheet[cellAddress]
-        if (cell) {
-          row.type = cell.w ? String(cell.w) : (cell.v ? String(cell.v) : '')
-        }
-      }
       if (headers['category'] !== undefined) {
         const cellAddress = XLSX.utils.encode_cell({ r: R, c: headers['category'] })
         const cell = worksheet[cellAddress]
@@ -123,22 +129,14 @@ export async function POST(req: NextRequest) {
           row.category = cell.w ? String(cell.w) : (cell.v ? String(cell.v) : '')
         }
       }
-      if (headers['season'] !== undefined) {
-        const cellAddress = XLSX.utils.encode_cell({ r: R, c: headers['season'] })
+      if (headers['maxPlayers'] !== undefined) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: headers['maxPlayers'] })
         const cell = worksheet[cellAddress]
         if (cell) {
-          row.season = cell.w ? String(cell.w) : (cell.v ? String(cell.v) : '')
-        }
-      }
-      if (headers['format'] !== undefined) {
-        const cellAddress = XLSX.utils.encode_cell({ r: R, c: headers['format'] })
-        const cell = worksheet[cellAddress]
-        if (cell) {
-          row.format = cell.w ? String(cell.w) : (cell.v ? String(cell.v) : '')
+          row.maxPlayers = cell.v !== undefined ? cell.v : (cell.w ? parseInt(cell.w) : null)
         }
       }
       
-      // Only add row if it has at least name
       if (row.name) {
         data.push(row)
       }
@@ -151,43 +149,11 @@ export async function POST(req: NextRequest) {
       const row = data[i]
       try {
         const name = (row.name || "").trim()
-        const typeStr = (row.type || "").trim().toUpperCase()
-        const formatStr = (row.format || "").trim().toUpperCase()
         const categoryStr = (row.category || "").trim().toUpperCase()
-        const season = (row.season || "").trim()
 
         if (!name) {
-          errors.push(`Satır ${i + 2}: Lig adı gereklidir`)
+          errors.push(`Satır ${i + 2}: Takım adı gereklidir`)
           continue
-        }
-
-        if (!season) {
-          errors.push(`Satır ${i + 2}: Sezon gereklidir`)
-          continue
-        }
-
-        // Parse league type
-        let type: LeagueType
-        if (typeStr === "INTRA_TEAM" || typeStr === "TAKIM İÇİ" || typeStr === "TAKIM ICI" || typeStr === "TAKIM İCI") {
-          type = LeagueType.INTRA_TEAM
-        } else if (typeStr === "CLUB" || typeStr === "KULÜP" || typeStr === "KULUP") {
-          type = LeagueType.CLUB
-        } else {
-          errors.push(`Satır ${i + 2}: Geçersiz lig tipi: ${typeStr}. INTRA_TEAM veya CLUB olmalı`)
-          continue
-        }
-
-        // Parse format (default to DOUBLES if not provided)
-        let format: LeagueFormat = LeagueFormat.DOUBLES
-        if (formatStr) {
-          if (formatStr === "DOUBLES" || formatStr === "ÇİFTLER" || formatStr === "CIFTLER" || formatStr === "ÇİFTLER LİGİ") {
-            format = LeagueFormat.DOUBLES
-          } else if (formatStr === "INDIVIDUAL" || formatStr === "BİREYSEL" || formatStr === "BIREYSEL" || formatStr === "BİREYSEL LİG") {
-            format = LeagueFormat.INDIVIDUAL
-          } else {
-            errors.push(`Satır ${i + 2}: Geçersiz format: ${formatStr}. DOUBLES veya INDIVIDUAL olmalı`)
-            continue
-          }
         }
 
         // Parse category
@@ -199,23 +165,35 @@ export async function POST(req: NextRequest) {
         } else if (categoryStr === "MIXED" || categoryStr === "MIX" || categoryStr === "KARMA") {
           category = TeamCategory.MIXED
         } else {
-          errors.push(`Satır ${i + 2}: Geçersiz kategori: ${categoryStr}. MALE, FEMALE veya MIXED olmalı`)
+          category = league.category // Default to league category
+        }
+
+        if (category !== league.category) {
+          errors.push(`Satır ${i + 2}: Takım kategorisi lig kategorisi ile eşleşmiyor`)
           continue
         }
 
-        const league = await prisma.league.create({
+        // Parse maxPlayers
+        let maxPlayersValue: number | null = null
+        if (row.maxPlayers !== undefined && row.maxPlayers !== null) {
+          const parsed = parseInt(String(row.maxPlayers))
+          if (!isNaN(parsed) && parsed > 0) {
+            maxPlayersValue = parsed
+          }
+        }
+
+        // Create team and add to league
+        const team = await prisma.team.create({
           data: {
             name,
-            type,
-            format,
             category,
-            season,
-            managerId: session.user.id,
-            status: LeagueStatus.DRAFT,
+            maxPlayers: maxPlayersValue,
+            captainId: session.user.id, // Manager becomes captain for imported teams
+            leagueId: params.id,
           },
         })
 
-        created.push(league.name)
+        created.push(team.name)
       } catch (error: any) {
         errors.push(`Satır ${i + 2}: ${error.message || "Bilinmeyen hata"}`)
       }
@@ -226,7 +204,7 @@ export async function POST(req: NextRequest) {
       errors: errors,
     })
   } catch (error: any) {
-    console.error("Error uploading leagues:", error)
+    console.error("Error uploading teams:", error)
     return NextResponse.json(
       { error: error.message || "Internal server error" },
       { status: 500 }
