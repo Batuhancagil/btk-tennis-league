@@ -65,6 +65,9 @@ export default function LeagueDetailPage() {
   const [uploadingExcel, setUploadingExcel] = useState(false)
   const [leaguePlayers, setLeaguePlayers] = useState<any[]>([])
   const [allPlayers, setAllPlayers] = useState<any[]>([])
+  const [selectedPlayersForAdd, setSelectedPlayersForAdd] = useState<string[]>([])
+  const [searchQuery, setSearchQuery] = useState<string>("")
+  const [dropdownOpen, setDropdownOpen] = useState<boolean>(false)
 
   const fetchLeague = useCallback(async () => {
     try {
@@ -200,6 +203,18 @@ export default function LeagueDetailPage() {
     }
   }, [matches, league, calculateTable])
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement
+      if (!target.closest('.dropdown-container')) {
+        setDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
   const handleApproveMatch = async (matchId: string) => {
     try {
       const res = await fetch(`/api/matches/${matchId}/approve`, {
@@ -305,6 +320,77 @@ export default function LeagueDetailPage() {
       console.error("Error adding player:", error)
       alert("Hata oluştu")
     }
+  }
+
+  const handleAddSelectedPlayers = async () => {
+    if (selectedPlayersForAdd.length === 0) {
+      alert("Lütfen en az bir oyuncu seçin")
+      return
+    }
+
+    try {
+      const res = await fetch(`/api/leagues/${leagueId}/players`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playerIds: selectedPlayersForAdd }),
+      })
+      
+      const data = await res.json()
+      if (res.ok) {
+        let message = `${data.created || selectedPlayersForAdd.length} oyuncu eklendi`
+        if (data.errors && data.errors.length > 0) {
+          message += `\nHatalar: ${data.errors.length}`
+          if (data.errors.length <= 5) {
+            message += `\n${data.errors.join("\n")}`
+          }
+        }
+        alert(message)
+        // Clear selections and search
+        setSelectedPlayersForAdd([])
+        setSearchQuery("")
+        setDropdownOpen(false)
+        await fetchLeaguePlayers()
+        await fetchLeague()
+      } else {
+        alert(data.error || "Hata oluştu")
+      }
+    } catch (error) {
+      console.error("Error adding players:", error)
+      alert("Hata oluştu")
+    }
+  }
+
+  const togglePlayerSelection = (playerId: string) => {
+    setSelectedPlayersForAdd(prev => {
+      if (prev.includes(playerId)) {
+        return prev.filter(id => id !== playerId)
+      } else {
+        return [...prev, playerId]
+      }
+    })
+  }
+
+  const getAvailablePlayers = () => {
+    if (!league) return []
+    return allPlayers.filter((player) => {
+      // Filter players based on league category
+      if (league.category === "MALE" && player.gender !== "MALE") {
+        return false
+      }
+      if (league.category === "FEMALE" && player.gender !== "FEMALE") {
+        return false
+      }
+      // Check if player is already in league
+      if (leaguePlayers.some((lp: any) => lp.player.id === player.id)) {
+        return false
+      }
+      // Filter by search query
+      const query = searchQuery.toLowerCase()
+      if (query && !player.name.toLowerCase().includes(query)) {
+        return false
+      }
+      return true
+    })
   }
 
   const handleRemovePlayerFromLeague = async (playerId: string) => {
@@ -618,34 +704,98 @@ export default function LeagueDetailPage() {
               <div className="bg-white rounded-lg shadow p-4 mb-4">
                 <div className="mb-4">
                   <label className="block text-sm font-medium mb-2">Oyuncu Ekle</label>
-                  <select
-                    onChange={(e) => {
-                      if (e.target.value) {
-                        handleAddPlayerToLeague(e.target.value)
-                        e.target.value = ""
-                      }
-                    }}
-                    className="w-full border rounded px-3 py-2"
-                  >
-                    <option value="">Oyuncu Seç</option>
-                    {allPlayers
-                      .filter((player) => {
-                        // Filter players based on league category
-                        if (league.category === "MALE" && player.gender !== "MALE") {
-                          return false
-                        }
-                        if (league.category === "FEMALE" && player.gender !== "FEMALE") {
-                          return false
-                        }
-                        // Check if player is already in league
-                        return !leaguePlayers.some((lp: any) => lp.player.id === player.id)
-                      })
-                      .map((player) => (
-                        <option key={player.id} value={player.id}>
-                          {player.name} ({player.level || "Seviye yok"})
-                        </option>
-                      ))}
-                  </select>
+                  <div className="relative dropdown-container">
+                    <div className="flex gap-2 mb-2">
+                      <div className="flex-1 relative">
+                        <input
+                          type="text"
+                          placeholder="Oyuncu ara..."
+                          value={searchQuery}
+                          onChange={(e) => {
+                            setSearchQuery(e.target.value)
+                            setDropdownOpen(true)
+                          }}
+                          onFocus={() => setDropdownOpen(true)}
+                          className="w-full border rounded px-3 py-2 pr-10"
+                        />
+                        {searchQuery && (
+                          <button
+                            onClick={() => {
+                              setSearchQuery("")
+                              setDropdownOpen(false)
+                            }}
+                            className="absolute right-2 top-2 text-gray-400 hover:text-gray-600"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                      <button
+                        onClick={handleAddSelectedPlayers}
+                        disabled={selectedPlayersForAdd.length === 0}
+                        className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Ekle ({selectedPlayersForAdd.length})
+                      </button>
+                    </div>
+
+                    {/* Selected players chips */}
+                    {selectedPlayersForAdd.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {selectedPlayersForAdd.map((playerId) => {
+                          const player = allPlayers.find(p => p.id === playerId)
+                          if (!player) return null
+                          return (
+                            <span
+                              key={playerId}
+                              className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm"
+                            >
+                              {player.name}
+                              <button
+                                onClick={() => togglePlayerSelection(playerId)}
+                                className="text-blue-600 hover:text-blue-800"
+                              >
+                                ✕
+                              </button>
+                            </span>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {/* Dropdown */}
+                    {dropdownOpen && (
+                      <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-60 overflow-y-auto">
+                        {getAvailablePlayers().length === 0 ? (
+                          <div className="p-3 text-gray-500 text-sm">Oyuncu bulunamadı</div>
+                        ) : (
+                          getAvailablePlayers().map((player) => {
+                            const isSelected = selectedPlayersForAdd.includes(player.id)
+                            return (
+                              <div
+                                key={player.id}
+                                onClick={() => togglePlayerSelection(player.id)}
+                                className={`p-2 hover:bg-gray-100 cursor-pointer flex items-center justify-between ${
+                                  isSelected ? "bg-blue-50" : ""
+                                }`}
+                              >
+                                <span className="text-sm">
+                                  {player.name} ({player.level || "Seviye yok"})
+                                </span>
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => {}}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="ml-2"
+                                />
+                              </div>
+                            )
+                          })
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="space-y-2">
                   {leaguePlayers.length > 0 ? (

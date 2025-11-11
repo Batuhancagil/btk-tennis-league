@@ -83,78 +83,102 @@ export async function POST(
       )
     }
 
-    const { playerId } = await req.json()
+    const { playerId, playerIds } = await req.json()
 
-    if (!playerId) {
-      return NextResponse.json({ error: "Missing playerId" }, { status: 400 })
+    // Support both single playerId and array of playerIds
+    const playerIdsToAdd = playerIds && Array.isArray(playerIds) ? playerIds : playerId ? [playerId] : []
+    
+    if (playerIdsToAdd.length === 0) {
+      return NextResponse.json({ error: "Missing playerId or playerIds" }, { status: 400 })
     }
 
-    // Check if player exists
-    const player = await prisma.user.findUnique({
-      where: { id: playerId },
-      select: { gender: true, status: true },
-    })
+    const created = []
+    const errors = []
 
-    if (!player) {
-      return NextResponse.json({ error: "Player not found" }, { status: 404 })
-    }
+    for (const pid of playerIdsToAdd) {
+      try {
+        // Check if player exists
+        const player = await prisma.user.findUnique({
+          where: { id: pid },
+          select: { gender: true, status: true },
+        })
 
-    // Only approved players can be added
-    if (player.status !== "APPROVED") {
-      return NextResponse.json(
-        { error: "Only approved players can be added to leagues" },
-        { status: 400 }
-      )
-    }
+        if (!player) {
+          errors.push(`Oyuncu bulunamadı: ${pid}`)
+          continue
+        }
 
-    // Validate gender compatibility
-    if (league.category === "MALE" && player.gender !== "MALE") {
-      return NextResponse.json(
-        { error: "Erkek ligine sadece erkek oyuncular eklenebilir" },
-        { status: 400 }
-      )
-    }
+        // Only approved players can be added
+        if (player.status !== "APPROVED") {
+          errors.push(`Sadece onaylanmış oyuncular eklenebilir: ${pid}`)
+          continue
+        }
 
-    if (league.category === "FEMALE" && player.gender !== "FEMALE") {
-      return NextResponse.json(
-        { error: "Kadın ligine sadece kadın oyuncular eklenebilir" },
-        { status: 400 }
-      )
-    }
+        // Validate gender compatibility
+        if (league.category === "MALE" && player.gender !== "MALE") {
+          errors.push(`Erkek ligine sadece erkek oyuncular eklenebilir: ${pid}`)
+          continue
+        }
 
-    // Check if player is already in league
-    const existingMember = await prisma.leaguePlayer.findUnique({
-      where: {
-        leagueId_playerId: {
-          leagueId: params.id,
-          playerId: playerId,
-        },
-      },
-    })
+        if (league.category === "FEMALE" && player.gender !== "FEMALE") {
+          errors.push(`Kadın ligine sadece kadın oyuncular eklenebilir: ${pid}`)
+          continue
+        }
 
-    if (existingMember) {
-      return NextResponse.json({ error: "Player already in league" }, { status: 400 })
-    }
-
-    const leaguePlayer = await prisma.leaguePlayer.create({
-      data: {
-        leagueId: params.id,
-        playerId: playerId,
-      },
-      include: {
-        player: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            gender: true,
-            level: true,
+        // Check if player is already in league
+        const existingMember = await prisma.leaguePlayer.findUnique({
+          where: {
+            leagueId_playerId: {
+              leagueId: params.id,
+              playerId: pid,
+            },
           },
-        },
-      },
-    })
+        })
 
-    return NextResponse.json(leaguePlayer)
+        if (existingMember) {
+          errors.push(`Oyuncu zaten ligde: ${pid}`)
+          continue
+        }
+
+        const leaguePlayer = await prisma.leaguePlayer.create({
+          data: {
+            leagueId: params.id,
+            playerId: pid,
+          },
+          include: {
+            player: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                gender: true,
+                level: true,
+              },
+            },
+          },
+        })
+
+        created.push(leaguePlayer)
+      } catch (error: any) {
+        if (error.code === "P2002") {
+          errors.push(`Oyuncu zaten ligde: ${pid}`)
+        } else {
+          errors.push(`Hata: ${pid} - ${error.message || "Bilinmeyen hata"}`)
+        }
+      }
+    }
+
+    // If single player, return single object for backward compatibility
+    if (playerIdsToAdd.length === 1 && created.length === 1) {
+      return NextResponse.json(created[0])
+    }
+
+    // For batch, return summary
+    return NextResponse.json({
+      created: created.length,
+      errors: errors.length > 0 ? errors : undefined,
+      players: created,
+    })
   } catch (error: any) {
     console.error("Error adding player to league:", error)
     if (error.code === "P2002") {
