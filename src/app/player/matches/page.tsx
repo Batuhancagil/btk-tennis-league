@@ -63,6 +63,7 @@ interface Match {
       name: string
     }
   }>
+  matchRequestId?: string | null
 }
 
 export default function PlayerMatchesPage() {
