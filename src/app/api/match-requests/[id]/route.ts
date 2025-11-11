@@ -116,6 +116,18 @@ export async function PATCH(
       },
     })
 
+    // Migrate chat messages from matchRequestId to matchId
+    await prisma.matchChat.updateMany({
+      where: {
+        matchRequestId: params.id,
+        matchId: null,
+      },
+      data: {
+        matchId: match.id,
+        matchRequestId: null, // Keep matchRequestId for reference, or set to null
+      },
+    })
+
     // Create notifications
     await prisma.notification.createMany({
       data: [

@@ -99,6 +99,17 @@ enum NotificationType {
   MATCH_MESSAGE
 }
 
+enum MatchRequestChatMessageType {
+  TEXT
+  DATE_SUGGESTION
+}
+
+enum DateSuggestionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model User {
   id            String       @id @default(cuid())
   email         String       @unique
@@ -356,6 +367,7 @@ model MatchRequest {
   opponent      User           @relation("MatchRequestOpponent", fields: [opponentId], references: [id])
   match         Match?
   notifications Notification[]
+  chatMessages  MatchChat[]
 
   @@unique([leagueId, requesterId, opponentId])
   @@map("match_requests")
@@ -381,16 +393,23 @@ model Notification {
 }
 
 model MatchChat {
-  id        String   @id @default(cuid())
-  matchId   String
-  senderId  String
-  message   String   @db.Text
-  createdAt DateTime @default(now())
+  id            String                      @id @default(cuid())
+  matchId       String?
+  matchRequestId String?
+  senderId      String
+  message       String?                      @db.Text
+  messageType   MatchRequestChatMessageType  @default(TEXT)
+  suggestedDate DateTime?
+  suggestedTime String?
+  dateStatus    DateSuggestionStatus?
+  createdAt     DateTime                     @default(now())
 
   // Relations
-  match  Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  sender User  @relation(fields: [senderId], references: [id])
+  match        Match?        @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  matchRequest MatchRequest? @relation(fields: [matchRequestId], references: [id], onDelete: Cascade)
+  sender       User          @relation(fields: [senderId], references: [id])
 
   @@index([matchId, createdAt])
+  @@index([matchRequestId, createdAt])
   @@map("match_chat")
 }

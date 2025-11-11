@@ -2,8 +2,10 @@
 
 import { useSession } from "next-auth/react"
 import { useEffect, useState, useCallback } from "react"
+import { useSearchParams } from "next/navigation"
 import Navbar from "@/components/Navbar"
 import MatchRequestForm from "@/components/MatchRequestForm"
+import MatchChat from "@/components/MatchChat"
 import { MatchRequestStatus } from "@prisma/client"
 
 interface MatchRequest {
@@ -40,11 +42,13 @@ interface MatchRequest {
 
 export default function MatchRequestsPage() {
   const { data: session } = useSession()
+  const searchParams = useSearchParams()
   const [matchRequests, setMatchRequests] = useState<MatchRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<"all" | "sent" | "received">("all")
   const [processingId, setProcessingId] = useState<string | null>(null)
   const [showRequestForm, setShowRequestForm] = useState(false)
+  const [openChatId, setOpenChatId] = useState<string | null>(null)
 
   const fetchMatchRequests = useCallback(async () => {
     try {
@@ -68,6 +72,29 @@ export default function MatchRequestsPage() {
       fetchMatchRequests()
     }
   }, [session, fetchMatchRequests])
+
+  // Open chat if chat query parameter is present
+  useEffect(() => {
+    const chatParam = searchParams.get("chat")
+    if (chatParam && matchRequests.length > 0) {
+      const requestExists = matchRequests.some(
+        (req) =>
+          req.id === chatParam &&
+          (req.status === MatchRequestStatus.PENDING ||
+            req.status === MatchRequestStatus.ACCEPTED)
+      )
+      if (requestExists) {
+        setOpenChatId(chatParam)
+        // Scroll to the chat after a short delay
+        setTimeout(() => {
+          const element = document.getElementById(`chat-${chatParam}`)
+          if (element) {
+            element.scrollIntoView({ behavior: "smooth", block: "center" })
+          }
+        }, 100)
+      }
+    }
+  }, [searchParams, matchRequests])
 
   const handleAccept = async (requestId: string) => {
     try {
@@ -237,21 +264,28 @@ export default function MatchRequestsPage() {
             <div className="space-y-4">
               {filteredRequests.map((request) => {
                 const isReceived = request.opponentId === session.user.id
+                const isSent = request.requesterId === session.user.id
                 const otherPerson = isReceived ? request.requester : request.opponent
 
                 return (
                   <div
                     key={request.id}
+                    id={`chat-${request.id}`}
                     className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
-                          <h3 className="text-lg font-semibold text-gray-900">
-                            {isReceived
-                              ? `${otherPerson.name} size maç isteği gönderdi`
-                              : `${otherPerson.name} adlı oyuncuya maç isteği gönderdiniz`}
-                          </h3>
+                          <div className="flex-1">
+                            <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                              {isReceived
+                                ? `${otherPerson.name} size maç isteği gönderdi`
+                                : `${otherPerson.name} adlı oyuncuya maç isteği gönderdiniz`}
+                            </h3>
+                            <p className="text-sm text-gray-500">
+                              {request.requester.name} ↔ {request.opponent.name}
+                            </p>
+                          </div>
                           <span
                             className={`px-3 py-1 rounded-lg font-medium text-sm ${getStatusColor(
                               request.status
@@ -316,6 +350,39 @@ export default function MatchRequestsPage() {
                           </div>
                         )}
                     </div>
+
+                    {/* Chat Toggle Button - Only for PENDING and ACCEPTED */}
+                    {(request.status === MatchRequestStatus.PENDING ||
+                      request.status === MatchRequestStatus.ACCEPTED) && (
+                      <div className="mt-4">
+                        <button
+                          onClick={() =>
+                            setOpenChatId(
+                              openChatId === request.id ? null : request.id
+                            )
+                          }
+                          className="w-full px-4 py-2 text-sm font-medium text-tennis-green hover:bg-tennis-green/10 rounded-lg border border-tennis-green transition-colors"
+                        >
+                          {openChatId === request.id
+                            ? "💬 Chat'i Kapat"
+                            : "💬 Chat'i Aç"}
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Chat Component */}
+                    {openChatId === request.id &&
+                      (request.status === MatchRequestStatus.PENDING ||
+                        request.status === MatchRequestStatus.ACCEPTED) && (
+                        <div className="mt-4">
+                          <MatchChat
+                            matchRequestId={request.id}
+                            matchId={request.match?.id}
+                            opponentId={request.opponentId}
+                            requesterId={request.requesterId}
+                          />
+                        </div>
+                      )}
                   </div>
                 )
               })}

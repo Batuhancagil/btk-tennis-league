@@ -3,8 +3,9 @@
 import { useSession } from "next-auth/react"
 import { useEffect, useState } from "react"
 import Navbar from "@/components/Navbar"
-import { InvitationStatus, UserRole, NotificationType } from "@prisma/client"
+import { InvitationStatus, UserRole, NotificationType, MatchRequestStatus } from "@prisma/client"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 
 interface Invitation {
   id: string
@@ -33,6 +34,9 @@ interface Notification {
   createdAt: string
   matchRequest?: {
     id: string
+    requesterId: string
+    opponentId: string
+    status: string
     requester: {
       id: string
       name: string
@@ -58,6 +62,7 @@ interface Notification {
 
 export default function NotificationsPage() {
   const { data: session } = useSession()
+  const router = useRouter()
   const [invitations, setInvitations] = useState<Invitation[]>([])
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
@@ -310,28 +315,42 @@ export default function NotificationsPage() {
                         })}
                       </p>
                     </div>
-                    {isMatchRequest && (
-                      <div className="flex gap-2 ml-4">
+                    <div className="flex flex-col gap-2 ml-4">
+                      {isMatchRequest && notif.matchRequest.status === MatchRequestStatus.PENDING && (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleMatchRequestResponse(notif.matchRequest!.id, true)
+                            }}
+                            className="px-4 py-2 bg-tennis-green text-white rounded-lg hover:bg-tennis-green/90 transition-colors font-medium"
+                          >
+                            Kabul Et
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleMatchRequestResponse(notif.matchRequest!.id, false)
+                            }}
+                            className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-medium"
+                          >
+                            Reddet
+                          </button>
+                        </div>
+                      )}
+                      {(notif.matchRequest.status === MatchRequestStatus.PENDING ||
+                        notif.matchRequest.status === MatchRequestStatus.ACCEPTED) && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
-                            handleMatchRequestResponse(notif.matchRequest!.id, true)
+                            router.push(`/player/match-requests?chat=${notif.matchRequest!.id}`)
                           }}
-                          className="px-4 py-2 bg-tennis-green text-white rounded-lg hover:bg-tennis-green/90 transition-colors font-medium"
+                          className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors font-medium text-sm"
                         >
-                          Kabul Et
+                          💬 Chat'e Git
                         </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleMatchRequestResponse(notif.matchRequest!.id, false)
-                          }}
-                          className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors font-medium"
-                        >
-                          Reddet
-                        </button>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
               )
@@ -468,7 +487,8 @@ export default function NotificationsPage() {
                 )}
               </div>
               <div className="flex gap-3 mt-6">
-                {selectedNotification.type === NotificationType.MATCH_REQUEST && (
+                {selectedNotification.type === NotificationType.MATCH_REQUEST && 
+                 selectedNotification.matchRequest?.status === MatchRequestStatus.PENDING && (
                   <>
                     <button
                       onClick={() => {

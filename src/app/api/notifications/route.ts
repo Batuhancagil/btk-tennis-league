@@ -26,7 +26,14 @@ export async function GET(req: NextRequest) {
       where,
       include: {
         matchRequest: {
-          include: {
+          select: {
+            id: true,
+            requesterId: true,
+            opponentId: true,
+            status: true,
+            message: true,
+            suggestedDate: true,
+            suggestedTime: true,
             requester: {
               select: {
                 id: true,
