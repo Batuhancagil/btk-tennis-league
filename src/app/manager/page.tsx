@@ -9,6 +9,7 @@ interface League {
   id: string
   name: string
   type: LeagueType
+  format: LeagueFormat
   category: TeamCategory
   season: string
   status: LeagueStatus
